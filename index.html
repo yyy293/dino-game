@@ -2,11 +2,11 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dino Game</title>
     <style>
-        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        canvas { border-bottom: 2px solid #535353; background-color: #fff; }
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: manipulation; }
+        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -33,6 +33,7 @@
         cactusImg.onload = () => { cactusLoaded = true; };
 
         let score = 0;
+        let highScore = localStorage.getItem('dinoHighScore') || 0;
         let scoreCounter = 0;
         let gameSpeed = 5;
         let isGameOver = false;
@@ -43,17 +44,18 @@
 
         function playScoreSound() {
             try {
-                const oscillator = audioCtx.createOscillator();
-                const gainNode = audioCtx.createGain();
-                oscillator.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.2);
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.2);
             } catch (e) {}
         }
 
@@ -68,14 +70,13 @@
                 if (dinoLoaded) {
                     ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
                 } else {
-                    ctx.fillStyle = "green";
+                    ctx.fillStyle = "#53a653";
                     ctx.fillRect(this.x, this.y, this.width, this.height);
                 }
             },
             update() {
                 this.dy += GRAVITY;
                 this.y += this.dy;
-
                 if (this.y >= GROUND_Y) {
                     this.y = GROUND_Y;
                     this.dy = 0;
@@ -87,7 +88,6 @@
             },
             jump() {
                 if (this.onGround && !isGameOver) {
-                    if (audioCtx.state === 'suspended') audioCtx.resume();
                     this.dy = JUMP_FORCE;
                     this.onGround = false;
                 }
@@ -105,7 +105,7 @@
                 if (cactusLoaded) {
                     ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
                 } else {
-                    ctx.fillStyle = "red";
+                    ctx.fillStyle = "#ff4d4d";
                     ctx.fillRect(this.x, this.y, this.width, this.height);
                 }
             }
@@ -129,22 +129,20 @@
         }
 
         function handleObstacles() {
-            if (Math.random() < 0.015) {
-                obstacles.push(new Obstacle());
-            }
+            if (Math.random() < 0.015) obstacles.push(new Obstacle());
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 obstacles[i].update();
-
-                if (dino.x < obstacles[i].x + obstacles[i].width - 10 &&
-                    dino.x + dino.width - 10 > obstacles[i].x &&
-                    dino.y < obstacles[i].y + obstacles[i].height - 10 &&
-                    dino.y + dino.height - 10 > obstacles[i].y) {
+                if (dino.x < obstacles[i].x + obstacles[i].width - 12 &&
+                    dino.x + dino.width - 12 > obstacles[i].x &&
+                    dino.y < obstacles[i].y + obstacles[i].height - 12 &&
+                    dino.y + dino.height - 12 > obstacles[i].y) {
                     isGameOver = true;
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('dinoHighScore', highScore);
+                    }
                 }
-
-                if (obstacles[i].x + obstacles[i].width < 0) {
-                    obstacles.splice(i, 1);
-                }
+                if (obstacles[i].x + obstacles[i].width < 0) obstacles.splice(i, 1);
             }
         }
 
@@ -157,9 +155,7 @@
                 ctx.fillText("PRESS 'R' TO RESTART", canvas.width/2 - 80, canvas.height/2 + 20);
                 return;
             }
-
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
             scoreCounter++;
             if (scoreCounter % 5 === 0) {
                 score++;
@@ -168,26 +164,28 @@
                     gameSpeed += 0.2;
                 }
             }
-
             dino.update();
             handleObstacles();
-
             ctx.fillStyle = "#535353";
-            ctx.font = "20px Courier";
-            ctx.fillText(score.toString().padStart(5, '0'), 720, 30);
-            
+            ctx.font = "16px Courier";
+            ctx.fillText(`HI ${highScore.toString().padStart(5, '0')} ${score.toString().padStart(5, '0')}`, 650, 30);
             animationFrameId = requestAnimationFrame(animate);
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                dino.jump();
-            }
-            if (e.code === 'KeyR') {
-                resetGame();
-            }
+            if (e.code === 'Space') { e.preventDefault(); dino.jump(); }
+            if (e.code === 'KeyR') resetGame();
         });
+
+        canvas.addEventListener('mousedown', (e) => {
+            e.preventDefault();
+            dino.jump();
+        });
+
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            dino.jump();
+        }, { passive: false });
 
         animate();
     </script>
