@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game - Space Fly Edition</title>
+    <title>Dino Game</title>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; }
         canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; max-width: 100%; }
@@ -20,6 +20,7 @@
         const GRAVITY = 0.6;
         const JUMP_FORCE = -14;
         const GROUND_Y = 150;
+        const SKY_Y = 20;
 
         let dinoLoaded = false;
         let cactusLoaded = false;
@@ -59,32 +60,43 @@
                 gain.gain.setValueAtTime(0.1, now);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
                 osc.start(); osc.stop(now + 0.1);
-            } else if (type === 'score') {
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(880, now);
-                osc.frequency.setValueAtTime(1100, now + 0.1);
-                gain.gain.setValueAtTime(0.05, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.start(); osc.stop(now + 0.2);
             } else if (type === 'death') {
-                const dunDunDun = [
-                    { freq: 196.00, start: 0, end: 0.25 },  // Dun
-                    { freq: 196.00, start: 0.3, end: 0.55 }, // Dun
-                    { freq: 155.56, start: 0.6, end: 1.5 }   // DUNNNNN
+                const notes = [
+                    { freq: 196.00, start: 0, dur: 0.3 },
+                    { freq: 196.00, start: 0.35, dur: 0.3 },
+                    { freq: 155.56, start: 0.7, dur: 1.2 }
                 ];
-                dunDunDun.forEach(note => {
-                    const osc = audioCtx.createOscillator();
-                    const gain = audioCtx.createGain();
-                    osc.type = 'triangle';
-                    osc.frequency.setValueAtTime(note.freq, now + note.start);
-                    gain.gain.setValueAtTime(0, now + note.start);
-                    gain.gain.linearRampToValueAtTime(0.3, now + note.start + 0.02);
-                    gain.gain.exponentialRampToValueAtTime(0.001, now + note.end);
-                    osc.connect(gain); gain.connect(audioCtx.destination);
-                    osc.start(now + note.start); osc.stop(now + note.end);
+
+                notes.forEach(n => {
+                    const pOsc = audioCtx.createOscillator();
+                    const pGain = audioCtx.createGain();
+                    pOsc.type = 'triangle';
+                    pOsc.frequency.setValueAtTime(n.freq, now + n.start);
+                    pGain.gain.setValueAtTime(0.2, now + n.start);
+                    pGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
+                    pOsc.connect(pGain); pGain.connect(audioCtx.destination);
+                    pOsc.start(now + n.start); pOsc.stop(now + n.start + n.dur);
+
+                    const vOsc = audioCtx.createOscillator();
+                    const vGain = audioCtx.createGain();
+                    vOsc.type = 'sawtooth';
+                    vOsc.frequency.setValueAtTime(n.freq, now + n.start);
+                    vOsc.frequency.setTargetAtTime(n.freq + 5, now + n.start + 0.1, 0.1);
+                    vGain.gain.setValueAtTime(0, now + n.start);
+                    vGain.gain.linearRampToValueAtTime(0.1, now + n.start + 0.1);
+                    vGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
+                    vOsc.connect(vGain); vGain.connect(audioCtx.destination);
+                    vOsc.start(now + n.start); vOsc.stop(now + n.start + n.dur);
+
+                    const oOsc = audioCtx.createOscillator();
+                    const oGain = audioCtx.createGain();
+                    oOsc.type = 'sine';
+                    oOsc.frequency.setValueAtTime(n.freq / 2, now + n.start);
+                    oGain.gain.setValueAtTime(0, now + n.start);
+                    oGain.gain.linearRampToValueAtTime(0.15, now + n.start + 0.05);
+                    oGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
+                    oOsc.connect(oGain); oGain.connect(audioCtx.destination);
+                    oOsc.start(now + n.start); oOsc.stop(now + n.start + n.dur);
                 });
             }
         }
@@ -102,11 +114,6 @@
                     ctx.fillStyle = canFly ? "#3498db" : "#53a653";
                     ctx.fillRect(this.x, this.y, this.width, this.height);
                 }
-                if(canFly) {
-                    ctx.fillStyle = "#e67e22";
-                    ctx.font = "bold 12px Courier";
-                    ctx.fillText("FLYING ACTIVE", this.x - 10, this.y - 10);
-                }
             },
             update() {
                 if (!canFly) {
@@ -117,17 +124,13 @@
                         this.dy = 0;
                     }
                 } else {
-                    this.y += this.dy;
-                    this.dy *= 0.9; 
-                    if (this.y < 0) this.y = 0;
-                    if (this.y > GROUND_Y) this.y = GROUND_Y;
+                    this.y = SKY_Y;
+                    this.dy = 0;
                 }
                 this.draw();
             },
             jump() {
-                if (canFly) {
-                    this.dy = -8; 
-                } else if (this.y >= GROUND_Y - 2 && !isGameOver) {
+                if (!canFly && this.y >= GROUND_Y - 2 && !isGameOver) {
                     this.dy = JUMP_FORCE;
                     playSound('jump');
                 }
@@ -202,7 +205,6 @@
             if (scoreCounter % 5 === 0) {
                 score++;
                 if (score > 0 && score % 100 === 0) {
-                    playSound('score');
                     gameSpeed += 0.2;
                 }
             }
@@ -218,8 +220,6 @@
             if (e.type === 'keydown') {
                 if (e.code === 'Space') {
                     e.preventDefault();
-                    
-                    // Triple Space Logic
                     const now = Date.now();
                     if (now - lastSpaceTime < 500) {
                         spaceCount++;
@@ -227,23 +227,9 @@
                         spaceCount = 1;
                     }
                     lastSpaceTime = now;
-
-                    if (spaceCount === 3) {
-                        canFly = true;
-                    }
-
+                    if (spaceCount === 3) canFly = true;
                     dino.jump();
                 }
-                
-                if (e.code === 'ArrowUp') {
-                    e.preventDefault();
-                    dino.jump();
-                }
-                
-                if (canFly && e.code === 'ArrowDown') {
-                    dino.dy = 8; 
-                }
-                
                 if (e.code === 'KeyR') resetGame();
             } else {
                 dino.jump();
