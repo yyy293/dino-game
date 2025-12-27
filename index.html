@@ -3,246 +3,188 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game</title>
+    <title>Dino Game - Mach 100 Zoom</title>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; }
-        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; max-width: 100%; }
+        #container { position: relative; width: 800px; height: 200px; overflow: hidden; border-bottom: 2px solid #535353; background-color: #fff; }
+        canvas { display: block; }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
+    <div id="container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 800;
-        canvas.height = 200;
+        const container = document.getElementById('container');
+        canvas.width = 800; canvas.height = 200;
 
-        const GRAVITY = 0.6;
-        const JUMP_FORCE = -14;
+        const GRAVITY = 1.2;
+        const JUMP_FORCE = -20;
         const GROUND_Y = 150;
         const SKY_Y = 20;
+        const BASE_SPEED = 100;
 
-        let dinoLoaded = false;
-        let cactusLoaded = false;
-        let canFly = false;
-        let spaceCount = 0;
-        let lastSpaceTime = 0;
+        let dinoLoaded = false, cactusLoaded = false, canFly = false;
+        let tapCount = 0, lastTapTime = 0;
+        let spaceCount = 0, lastSpaceTime = 0;
+        let gameSpeed = BASE_SPEED;
+        let score = 0, highScore = localStorage.getItem('dinoHighScore') || 0;
+        let isGameOver = false, obstacles = [], animationFrameId;
+        let currentZoom = 1;
 
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
-        dinoImg.onload = () => { dinoLoaded = true; };
+        dinoImg.onload = () => dinoLoaded = true;
 
         const cactusImg = new Image();
         cactusImg.src = 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
-        cactusImg.onload = () => { cactusLoaded = true; };
-
-        let score = 0;
-        let highScore = localStorage.getItem('dinoHighScore') || 0;
-        let scoreCounter = 0;
-        let gameSpeed = 5;
-        let isGameOver = false;
-        let obstacles = [];
-        let animationFrameId;
+        cactusImg.onload = () => cactusLoaded = true;
 
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function playSound(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const now = audioCtx.currentTime;
-
             if (type === 'jump') {
                 const osc = audioCtx.createOscillator();
                 const gain = audioCtx.createGain();
                 osc.connect(gain); gain.connect(audioCtx.destination);
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(150, now);
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(150, now);
                 osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                gain.gain.setValueAtTime(0.1, now); gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
                 osc.start(); osc.stop(now + 0.1);
             } else if (type === 'death') {
-                const notes = [
-                    { freq: 196.00, start: 0, dur: 0.3 },
-                    { freq: 196.00, start: 0.35, dur: 0.3 },
-                    { freq: 155.56, start: 0.7, dur: 1.2 }
-                ];
-
+                const notes = [{f:196,s:0,d:0.4},{f:196,s:0.45,d:0.4},{f:155.56,s:0.9,d:1.5}];
                 notes.forEach(n => {
-                    const pOsc = audioCtx.createOscillator();
-                    const pGain = audioCtx.createGain();
-                    pOsc.type = 'triangle';
-                    pOsc.frequency.setValueAtTime(n.freq, now + n.start);
-                    pGain.gain.setValueAtTime(0.2, now + n.start);
-                    pGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
-                    pOsc.connect(pGain); pGain.connect(audioCtx.destination);
-                    pOsc.start(now + n.start); pOsc.stop(now + n.start + n.dur);
-
-                    const vOsc = audioCtx.createOscillator();
-                    const vGain = audioCtx.createGain();
-                    vOsc.type = 'sawtooth';
-                    vOsc.frequency.setValueAtTime(n.freq, now + n.start);
-                    vOsc.frequency.setTargetAtTime(n.freq + 5, now + n.start + 0.1, 0.1);
-                    vGain.gain.setValueAtTime(0, now + n.start);
-                    vGain.gain.linearRampToValueAtTime(0.1, now + n.start + 0.1);
-                    vGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
-                    vOsc.connect(vGain); vGain.connect(audioCtx.destination);
-                    vOsc.start(now + n.start); vOsc.stop(now + n.start + n.dur);
-
-                    const oOsc = audioCtx.createOscillator();
-                    const oGain = audioCtx.createGain();
-                    oOsc.type = 'sine';
-                    oOsc.frequency.setValueAtTime(n.freq / 2, now + n.start);
-                    oGain.gain.setValueAtTime(0, now + n.start);
-                    oGain.gain.linearRampToValueAtTime(0.15, now + n.start + 0.05);
-                    oGain.gain.exponentialRampToValueAtTime(0.01, now + n.start + n.dur);
-                    oOsc.connect(oGain); oGain.connect(audioCtx.destination);
-                    oOsc.start(now + n.start); oOsc.stop(now + n.start + n.dur);
+                    const masterGain = audioCtx.createGain();
+                    masterGain.connect(audioCtx.destination);
+                    ['triangle','sawtooth','sine','square'].forEach((t,i) => {
+                        const osc = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        osc.type = t;
+                        let freq = i === 2 ? n.f/2 : (i === 3 ? n.f/4 : n.f);
+                        osc.frequency.setValueAtTime(freq, now + n.s);
+                        g.gain.setValueAtTime(0, now + n.s);
+                        g.gain.linearRampToValueAtTime(i === 3 ? 0.05 : 0.1, now + n.s + 0.05);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + n.s + n.d);
+                        osc.connect(g); g.connect(masterGain);
+                        osc.start(now + n.s); osc.stop(now + n.s + n.d);
+                    });
                 });
             }
         }
 
         const dino = {
-            x: 50,
-            y: GROUND_Y,
-            width: 44,
-            height: 47,
-            dy: 0,
+            x: 50, y: GROUND_Y, width: 44, height: 47, dy: 0,
             draw() {
-                if (dinoLoaded) {
-                    ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
-                } else {
-                    ctx.fillStyle = canFly ? "#3498db" : "#53a653";
-                    ctx.fillRect(this.x, this.y, this.width, this.height);
-                }
+                if (dinoLoaded) ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
+                else { ctx.fillStyle = canFly ? "#3498db" : "#53a653"; ctx.fillRect(this.x, this.y, this.width, this.height); }
             },
             update() {
                 if (!canFly) {
-                    this.dy += GRAVITY;
-                    this.y += this.dy;
-                    if (this.y >= GROUND_Y) {
-                        this.y = GROUND_Y;
-                        this.dy = 0;
-                    }
-                } else {
-                    this.y = SKY_Y;
-                    this.dy = 0;
-                }
+                    this.dy += GRAVITY; this.y += this.dy;
+                    if (this.y >= GROUND_Y) { this.y = GROUND_Y; this.dy = 0; }
+                } else { this.y = SKY_Y; this.dy = 0; }
                 this.draw();
             },
-            jump() {
-                if (!canFly && this.y >= GROUND_Y - 2 && !isGameOver) {
-                    this.dy = JUMP_FORCE;
-                    playSound('jump');
-                }
-            }
+            jump() { if (!canFly && this.y >= GROUND_Y - 10 && !isGameOver) { this.dy = JUMP_FORCE; playSound('jump'); } }
         };
 
         class Obstacle {
             constructor() {
-                this.x = canvas.width;
-                this.width = 30;
-                this.height = 45;
+                this.x = canvas.width; this.width = 30; this.height = 45;
                 this.y = GROUND_Y + (47 - this.height);
-            }
-            draw() {
-                if (cactusLoaded) {
-                    ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
-                } else {
-                    ctx.fillStyle = "#ff4d4d";
-                    ctx.fillRect(this.x, this.y, this.width, this.height);
-                }
             }
             update() {
                 this.x -= gameSpeed;
-                this.draw();
+                if (cactusLoaded) ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
+                else { ctx.fillStyle = "#ff4d4d"; ctx.fillRect(this.x, this.y, this.width, this.height); }
             }
         }
 
         function resetGame() {
-            score = 0;
-            scoreCounter = 0;
-            gameSpeed = 5;
-            isGameOver = false;
-            obstacles = [];
-            dino.y = GROUND_Y;
-            dino.dy = 0;
-            canFly = false;
-            spaceCount = 0;
-            cancelAnimationFrame(animationFrameId);
-            animate();
-        }
-
-        function handleObstacles() {
-            if (Math.random() < 0.015) obstacles.push(new Obstacle());
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                obstacles[i].update();
-                if (dino.x < obstacles[i].x + obstacles[i].width - 12 &&
-                    dino.x + dino.width - 12 > obstacles[i].x &&
-                    dino.y < obstacles[i].y + obstacles[i].height - 12 &&
-                    dino.y + dino.height - 12 > obstacles[i].y) {
-                    isGameOver = true;
-                    playSound('death');
-                    if (score > highScore) {
-                        highScore = score;
-                        localStorage.setItem('dinoHighScore', highScore);
-                    }
-                }
-                if (obstacles[i].x + obstacles[i].width < 0) obstacles.splice(i, 1);
-            }
+            score = 0; gameSpeed = BASE_SPEED; isGameOver = false; obstacles = [];
+            dino.y = GROUND_Y; dino.dy = 0; canFly = false; tapCount = 0; spaceCount = 0;
+            currentZoom = 1; canvas.style.transform = `scale(1)`;
+            cancelAnimationFrame(animationFrameId); animate();
         }
 
         function animate() {
             if (isGameOver) {
-                ctx.fillStyle = "black";
-                ctx.font = "24px Courier";
-                ctx.fillText("GAME OVER", canvas.width/2 - 60, canvas.height/2 - 10);
-                ctx.font = "14px Courier";
-                ctx.fillText("PRESS 'R' TO RESTART", canvas.width/2 - 80, canvas.height/2 + 25);
+                ctx.fillStyle = "rgba(0,0,0,0.1)"; ctx.fillRect(0,0,canvas.width,canvas.height);
+                ctx.fillStyle = "black"; ctx.font = "bold 24px Courier";
+                ctx.fillText("GAME OVER", canvas.width/2 - 60, canvas.height/2);
                 return;
             }
+
+            let inDanger = false;
+            obstacles.forEach(obs => {
+                let dist = obs.x - (dino.x + dino.width);
+                if (dist > 0 && dist < 180 && !canFly) inDanger = true;
+            });
+
+            if (inDanger) {
+                gameSpeed = gameSpeed * 0.85 + 10 * 0.15;
+                currentZoom = currentZoom * 0.9 + 1.2 * 0.1;
+            } else {
+                gameSpeed = gameSpeed * 0.95 + BASE_SPEED * 0.05;
+                currentZoom = currentZoom * 0.9 + 1.0 * 0.1;
+            }
+
+            canvas.style.transform = `scale(${currentZoom})`;
+            canvas.style.transformOrigin = `${dino.x + 100}px ${dino.y}px`;
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            scoreCounter++;
-            if (scoreCounter % 5 === 0) {
-                score++;
-                if (score > 0 && score % 100 === 0) {
-                    gameSpeed += 0.2;
+            score += 1;
+            dino.update();
+            
+            if (Math.random() < 0.1) {
+                if (obstacles.length === 0 || obstacles[obstacles.length-1].x < canvas.width - 600) {
+                    obstacles.push(new Obstacle());
                 }
             }
-            dino.update();
-            handleObstacles();
-            ctx.fillStyle = "#535353";
-            ctx.font = "16px Courier";
+
+            for (let i = obstacles.length - 1; i >= 0; i--) {
+                obstacles[i].update();
+                if (dino.x < obstacles[i].x + obstacles[i].width - 15 &&
+                    dino.x + dino.width - 15 > obstacles[i].x &&
+                    dino.y < obstacles[i].y + obstacles[i].height - 15 &&
+                    dino.y + dino.height - 15 > obstacles[i].y) {
+                    isGameOver = true; playSound('death');
+                    if (score > highScore) { highScore = score; localStorage.setItem('dinoHighScore', highScore); }
+                }
+                if (obstacles[i].x + obstacles[i].width < -100) obstacles.splice(i, 1);
+            }
+
+            ctx.fillStyle = "#535353"; ctx.font = "16px Courier";
             ctx.fillText(`HI ${highScore.toString().padStart(5, '0')} ${score.toString().padStart(5, '0')}`, 650, 30);
             animationFrameId = requestAnimationFrame(animate);
         }
 
-        const handleInput = (e) => {
-            if (e.type === 'keydown') {
-                if (e.code === 'Space') {
-                    e.preventDefault();
-                    const now = Date.now();
-                    if (now - lastSpaceTime < 500) {
-                        spaceCount++;
-                    } else {
-                        spaceCount = 1;
-                    }
-                    lastSpaceTime = now;
-                    if (spaceCount === 3) canFly = true;
-                    dino.jump();
-                }
-                if (e.code === 'KeyR') resetGame();
-            } else {
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                const now = Date.now();
+                if (now - lastSpaceTime < 400) spaceCount++; else spaceCount = 1;
+                lastSpaceTime = now;
+                if (spaceCount === 3) canFly = true;
                 dino.jump();
             }
+            else if (e.code === 'ArrowUp') dino.jump();
+            else if (e.code === 'KeyR') resetGame();
+        });
+
+        const handleMouse = (e) => {
+            const now = Date.now();
+            if (now - lastTapTime < 400) tapCount++; else tapCount = 1;
+            lastTapTime = now;
+            if (tapCount === 2) canFly = true;
+            dino.jump();
         };
 
-        window.addEventListener('keydown', handleInput);
-        window.addEventListener('mousedown', handleInput);
-        window.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            handleInput(e);
-        }, { passive: false });
-
+        window.addEventListener('mousedown', handleMouse);
+        window.addEventListener('touchstart', (e) => { e.preventDefault(); handleMouse(e); }, { passive: false });
         animate();
     </script>
 </body>
