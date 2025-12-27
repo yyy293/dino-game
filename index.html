@@ -93,10 +93,10 @@
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 obstacles[i].update();
 
-                if (dino.x < obstacles[i].x + obstacles[i].width - 5 &&
-                    dino.x + dino.width - 5 > obstacles[i].x &&
-                    dino.y < obstacles[i].y + obstacles[i].height - 5 &&
-                    dino.y + dino.height - 5 > obstacles[i].y) {
+                if (dino.x < obstacles[i].x + obstacles[i].width - 10 &&
+                    dino.x + dino.width - 10 > obstacles[i].x &&
+                    dino.y < obstacles[i].y + obstacles[i].height - 10 &&
+                    dino.y + dino.height - 10 > obstacles[i].y) {
                     isGameOver = true;
                 }
 
@@ -122,7 +122,7 @@
             }
             
             if (score > 0 && score % 100 === 0 && scoreCounter % 5 === 0) {
-                gameSpeed += 0.2;
+                gameSpeed += 0.1;
             }
 
             dino.update();
@@ -138,6 +138,7 @@
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Space' && dino.grounded && !isGameOver) {
                 dino.dy = JUMP_FORCE;
+                dino.grounded = false;
             }
             if (e.code === 'KeyR') {
                 resetGame();
@@ -155,4 +156,4 @@
         cactusImg.onload = onImageLoad;
     </script>
 </body>
-</html>```
+</html>
