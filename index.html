@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chrome Dino Clone</title>
+    <style>
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
+        canvas { border-bottom: 2px solid #535353; }
+    </style>
+</head>
+<body>
+    <canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+canvas.width = 800;
+canvas.height = 200;
+
+const dinoImg = new Image();
+dinoImg.src = 'https://raw.githubusercontent.com/wayou/t-rex-runner/master/assets/default_100_percent/100-offline-sprite.png';
+
+let score = 0;
+let gameSpeed = 5;
+let isGameOver = false;
+
+const dino = {
+    x: 50, y: 150, w: 44, h: 47,
+    dy: 0, jumpForce: 12, gravity: 0.6, grounded: false
+};
+
+const obstacles = [];
+
+function spawnObstacle() {
+    const type = Math.random() > 0.5 ? {sx: 228, w: 17, h: 35} : {sx: 332, w: 25, h: 50};
+    obstacles.push({ x: canvas.width, y: canvas.height - type.h, ...type });
+}
+
+function update() {
+    if (isGameOver) return;
+
+    if (dino.y + dino.h < canvas.height) {
+        dino.dy += dino.gravity;
+        dino.grounded = false;
+    } else {
+        dino.dy = 0;
+        dino.grounded = true;
+        dino.y = canvas.height - dino.h;
+    }
+    dino.y += dino.dy;
+
+    if (Math.random() < 0.015) spawnObstacle();
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+        obstacles[i].x -= gameSpeed;
+        if (dino.x < obstacles[i].x + obstacles[i].w && 
+            dino.x + dino.w > obstacles[i].x && 
+            dino.y < obstacles[i].y + obstacles[i].h && 
+            dino.y + dino.h > obstacles[i].y) {
+            isGameOver = true;
+        }
+        if (obstacles[i].x + obstacles[i].w < 0) obstacles.splice(i, 1);
+    }
+
+    score += 0.1;
+    gameSpeed += 0.001;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = "#535353";
+    ctx.beginPath(); ctx.moveTo(0, canvas.height); ctx.lineTo(canvas.width, canvas.height); ctx.stroke();
+
+    ctx.drawImage(dinoImg, 848, 2, 44, 47, dino.x, dino.y, dino.w, dino.h);
+
+    obstacles.forEach(o => {
+        ctx.drawImage(dinoImg, o.sx, 2, o.w, o.h, o.x, o.y, o.w, o.h);
+    });
+
+    ctx.fillStyle = "#535353";
+    ctx.font = "20px Courier New";
+    ctx.fillText(Math.floor(score).toString().padStart(5, '0'), 720, 30);
+
+    if (isGameOver) {
+        ctx.fillText("G A M E  O V E R", 320, 100);
+        return;
+    }
+    requestAnimationFrame(draw);
+}
+
+setInterval(update, 1000/60);
+
+window.addEventListener("keydown", (e) => {
+    if ((e.code === "Space" || e.code === "ArrowUp") && dino.grounded) {
+        dino.dy = -dino.jumpForce;
+    }
+    if (isGameOver && (e.code === "Space" || e.code === "ArrowUp" || e.code === "ArrowDown")) {
+        location.reload();
+    }
+});
+
+dinoImg.onload = draw;
+</script>
+</body>
+</html>
