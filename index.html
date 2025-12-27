@@ -39,6 +39,22 @@
         let obstacles = [];
         let animationFrameId;
 
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playScoreSound() {
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            oscillator.type = 'square';
+            oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+            oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.1);
+            gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            oscillator.start();
+            oscillator.stop(audioCtx.currentTime + 0.2);
+        }
+
         const dino = {
             x: 50,
             y: GROUND_Y,
@@ -60,14 +76,15 @@
                     this.grounded = false;
                 } else {
                     this.dy = 0;
-                    this.grounded = true;
                     this.y = GROUND_Y;
+                    this.grounded = true;
                 }
                 this.y += this.dy;
                 this.draw();
             },
             jump() {
                 if (this.grounded && !isGameOver) {
+                    if (audioCtx.state === 'suspended') audioCtx.resume();
                     this.dy = JUMP_FORCE;
                     this.grounded = false;
                 }
@@ -103,68 +120,5 @@
             obstacles = [];
             dino.y = GROUND_Y;
             dino.dy = 0;
-            dino.grounded = true;
-            cancelAnimationFrame(animationFrameId);
-            animate();
-        }
-
-        function handleObstacles() {
-            if (Math.random() < 0.015) {
-                obstacles.push(new Obstacle());
-            }
-            for (let i = obstacles.length - 1; i >= 0; i--) {
-                obstacles[i].update();
-
-                if (dino.x < obstacles[i].x + obstacles[i].width - 10 &&
-                    dino.x + dino.width - 10 > obstacles[i].x &&
-                    dino.y < obstacles[i].y + obstacles[i].height - 10 &&
-                    dino.y + dino.height - 10 > obstacles[i].y) {
-                    isGameOver = true;
-                }
-
-                if (obstacles[i].x + obstacles[i].width < 0) {
-                    obstacles.splice(i, 1);
-                }
-            }
-        }
-
-        function animate() {
-            if (isGameOver) {
-                ctx.fillStyle = "black";
-                ctx.font = "20px Courier";
-                ctx.fillText("GAME OVER", canvas.width/2 - 50, canvas.height/2 - 10);
-                ctx.font = "14px Courier";
-                ctx.fillText("PRESS 'R' TO RESTART", canvas.width/2 - 80, canvas.height/2 + 20);
-                return;
-            }
-
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            scoreCounter++;
-            if (scoreCounter % 5 === 0) score++;
-            if (score > 0 && score % 100 === 0 && scoreCounter % 5 === 0) gameSpeed += 0.1;
-
-            dino.update();
-            handleObstacles();
-
-            ctx.fillStyle = "#535353";
-            ctx.font = "20px Courier";
-            ctx.fillText(score.toString().padStart(5, '0'), 720, 30);
-            
-            animationFrameId = requestAnimationFrame(animate);
-        }
-
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') {
-                e.preventDefault();
-                dino.jump();
-            }
-            if (e.code === 'KeyR') {
-                resetGame();
-            }
-        });
-
-        animate();
-    </script>
-</body>
-</html>
+            dino.ground
+        
