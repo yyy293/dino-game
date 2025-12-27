@@ -21,11 +21,16 @@
         const JUMP_FORCE = -12;
         const GROUND_Y = 150;
 
+        let dinoLoaded = false;
+        let cactusLoaded = false;
+
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
+        dinoImg.onload = () => { dinoLoaded = true; };
 
         const cactusImg = new Image();
         cactusImg.src = 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
+        cactusImg.onload = () => { cactusLoaded = true; };
 
         let score = 0;
         let scoreCounter = 0;
@@ -42,7 +47,12 @@
             dy: 0,
             grounded: true,
             draw() {
-                ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
+                if (dinoLoaded) {
+                    ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = "green";
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
             },
             update() {
                 if (this.y < GROUND_Y) {
@@ -72,7 +82,12 @@
                 this.y = GROUND_Y + (47 - this.height);
             }
             draw() {
-                ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
+                if (cactusLoaded) {
+                    ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
+                } else {
+                    ctx.fillStyle = "red";
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                }
             }
             update() {
                 this.x -= gameSpeed;
@@ -118,7 +133,7 @@
                 ctx.font = "20px Courier";
                 ctx.fillText("GAME OVER", canvas.width/2 - 50, canvas.height/2 - 10);
                 ctx.font = "14px Courier";
-                ctx.fillText("DOUBLE CLICK or PRESS R TO RESTART", canvas.width/2 - 140, canvas.height/2 + 20);
+                ctx.fillText("PRESS 'R' TO RESTART", canvas.width/2 - 80, canvas.height/2 + 20);
                 return;
             }
 
@@ -139,12 +154,19 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') dino.jump();
-            if (e.code === 'KeyR') resetGame();
+            if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'ArrowDown') {
+                e.preventDefault(); 
+                dino.jump();
+            }
+            if (e.code === 'KeyR') {
+                resetGame();
+            }
         });
 
-        canvas.addEventListener('mousedown', () => {
-            dino.jump();
-        });
+        canvas.addEventListener('mousedown', () => dino.jump());
+        canvas.addEventListener('dblclick', () => { if (isGameOver) resetGame(); });
 
-        canvas.addEventListener('
+        animate();
+    </script>
+</body>
+</html>
