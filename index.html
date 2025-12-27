@@ -24,10 +24,15 @@
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
 
+        const cactusImg = new Image();
+        cactusImg.src = 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
+
         let score = 0;
+        let scoreCounter = 0;
         let gameSpeed = 5;
         let isGameOver = false;
         let obstacles = [];
+        let animationFrameId;
 
         const dino = {
             x: 50,
@@ -40,7 +45,7 @@
                 ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
             },
             update() {
-                if (this.y + this.height < canvas.height - 10) {
+                if (this.y < GROUND_Y) {
                     this.dy += GRAVITY;
                     this.grounded = false;
                 } else {
@@ -56,18 +61,29 @@
         class Obstacle {
             constructor() {
                 this.x = canvas.width;
-                this.width = 20 + Math.random() * 30;
-                this.height = 30 + Math.random() * 20;
+                this.width = 30;
+                this.height = 45;
                 this.y = GROUND_Y + (47 - this.height);
             }
             draw() {
-                ctx.fillStyle = "#535353";
-                ctx.fillRect(this.x, this.y, this.width, this.height);
+                ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
             }
             update() {
                 this.x -= gameSpeed;
                 this.draw();
             }
+        }
+
+        function resetGame() {
+            score = 0;
+            scoreCounter = 0;
+            gameSpeed = 5;
+            isGameOver = false;
+            obstacles = [];
+            dino.y = GROUND_Y;
+            dino.dy = 0;
+            cancelAnimationFrame(animationFrameId);
+            animate();
         }
 
         function handleObstacles() {
@@ -76,16 +92,16 @@
             }
             for (let i = obstacles.length - 1; i >= 0; i--) {
                 obstacles[i].update();
-                if (dino.x < obstacles[i].x + obstacles[i].width &&
-                    dino.x + dino.width > obstacles[i].x &&
-                    dino.y < obstacles[i].y + obstacles[i].height &&
-                    dino.y + dino.height > obstacles[i].y) {
+
+                if (dino.x < obstacles[i].x + obstacles[i].width - 5 &&
+                    dino.x + dino.width - 5 > obstacles[i].x &&
+                    dino.y < obstacles[i].y + obstacles[i].height - 5 &&
+                    dino.y + dino.height - 5 > obstacles[i].y) {
                     isGameOver = true;
                 }
+
                 if (obstacles[i].x + obstacles[i].width < 0) {
                     obstacles.splice(i, 1);
-                    score++;
-                    gameSpeed += 0.1;
                 }
             }
         }
@@ -94,25 +110,49 @@
             if (isGameOver) {
                 ctx.fillStyle = "black";
                 ctx.font = "20px Courier";
-                ctx.fillText("GAME OVER", canvas.width/2 - 50, canvas.height/2);
+                ctx.fillText("GAME OVER - PRESS R TO RESTART", canvas.width/2 - 160, canvas.height/2);
                 return;
             }
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            scoreCounter++;
+            if (scoreCounter % 5 === 0) {
+                score++;
+            }
+            
+            if (score > 0 && score % 100 === 0 && scoreCounter % 5 === 0) {
+                gameSpeed += 0.2;
+            }
+
             dino.update();
             handleObstacles();
+
             ctx.fillStyle = "#535353";
             ctx.font = "20px Courier";
             ctx.fillText(score.toString().padStart(5, '0'), 720, 30);
-            requestAnimationFrame(animate);
+            
+            animationFrameId = requestAnimationFrame(animate);
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'ArrowUp' && dino.grounded) {
+            if (e.code === 'Space' && dino.grounded && !isGameOver) {
                 dino.dy = JUMP_FORCE;
+            }
+            if (e.code === 'KeyR') {
+                resetGame();
             }
         });
 
-        dinoImg.onload = () => animate();
+        let imagesLoaded = 0;
+        const totalImages = 2;
+        const onImageLoad = () => {
+            imagesLoaded++;
+            if (imagesLoaded === totalImages) animate();
+        };
+
+        dinoImg.onload = onImageLoad;
+        cactusImg.onload = onImageLoad;
     </script>
 </body>
-</html>
+</html>```
