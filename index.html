@@ -6,7 +6,7 @@
     <title>Dino Game</title>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; }
+        canvas { border-bottom: 2px solid #535353; background-color: #fff; }
     </style>
 </head>
 <body>
@@ -103,6 +103,7 @@
             obstacles = [];
             dino.y = GROUND_Y;
             dino.dy = 0;
+            dino.grounded = true;
             cancelAnimationFrame(animationFrameId);
             animate();
         }
@@ -154,17 +155,14 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'ArrowDown') {
-                e.preventDefault(); 
+            if (e.code === 'Space') {
+                e.preventDefault();
                 dino.jump();
             }
             if (e.code === 'KeyR') {
                 resetGame();
             }
         });
-
-        canvas.addEventListener('mousedown', () => dino.jump());
-        canvas.addEventListener('dblclick', () => { if (isGameOver) resetGame(); });
 
         animate();
     </script>
