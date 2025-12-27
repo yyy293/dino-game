@@ -5,8 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dino Game</title>
     <style>
-        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: manipulation; }
-        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; }
+        body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; }
+        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; max-width: 100%; }
     </style>
 </head>
 <body>
@@ -65,7 +65,6 @@
             width: 44,
             height: 47,
             dy: 0,
-            onGround: true,
             draw() {
                 if (dinoLoaded) {
                     ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
@@ -77,19 +76,16 @@
             update() {
                 this.dy += GRAVITY;
                 this.y += this.dy;
+
                 if (this.y >= GROUND_Y) {
                     this.y = GROUND_Y;
                     this.dy = 0;
-                    this.onGround = true;
-                } else {
-                    this.onGround = false;
                 }
                 this.draw();
             },
             jump() {
-                if (this.onGround && !isGameOver) {
+                if (this.y >= GROUND_Y - 2 && !isGameOver) {
                     this.dy = JUMP_FORCE;
-                    this.onGround = false;
                 }
             }
         };
@@ -123,8 +119,7 @@
             obstacles = [];
             dino.y = GROUND_Y;
             dino.dy = 0;
-            dino.onGround = true;
-            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            cancelAnimationFrame(animationFrameId);
             animate();
         }
 
@@ -172,19 +167,23 @@
             animationFrameId = requestAnimationFrame(animate);
         }
 
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space') { e.preventDefault(); dino.jump(); }
-            if (e.code === 'KeyR') resetGame();
-        });
+        const handleInput = (e) => {
+            if (e.type === 'keydown') {
+                if (e.code === 'Space' || e.code === 'ArrowUp') {
+                    e.preventDefault();
+                    dino.jump();
+                }
+                if (e.code === 'KeyR') resetGame();
+            } else {
+                dino.jump();
+            }
+        };
 
-        canvas.addEventListener('mousedown', (e) => {
+        window.addEventListener('keydown', handleInput);
+        window.addEventListener('mousedown', handleInput);
+        window.addEventListener('touchstart', (e) => {
             e.preventDefault();
-            dino.jump();
-        });
-
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            dino.jump();
+            handleInput(e);
         }, { passive: false });
 
         animate();
