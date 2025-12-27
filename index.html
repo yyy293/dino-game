@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game - Dramatic Edition</title>
+    <title>Dino Game - Space Fly Edition</title>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; touch-action: none; }
         canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; max-width: 100%; }
@@ -24,7 +24,8 @@
         let dinoLoaded = false;
         let cactusLoaded = false;
         let canFly = false;
-        let keySequence = "";
+        let spaceCount = 0;
+        let lastSpaceTime = 0;
 
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
@@ -69,28 +70,21 @@
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
                 osc.start(); osc.stop(now + 0.2);
             } else if (type === 'death') {
-                // "Dun... Dun... DUNNNNN" Piano Sequence
-                // Notes: G3 (196Hz), G3 (196Hz), Eb3 (155Hz)
                 const dunDunDun = [
                     { freq: 196.00, start: 0, end: 0.25 },  // Dun
                     { freq: 196.00, start: 0.3, end: 0.55 }, // Dun
                     { freq: 155.56, start: 0.6, end: 1.5 }   // DUNNNNN
                 ];
-
                 dunDunDun.forEach(note => {
                     const osc = audioCtx.createOscillator();
                     const gain = audioCtx.createGain();
-                    osc.type = 'triangle'; // Piano-ish soft wave
+                    osc.type = 'triangle';
                     osc.frequency.setValueAtTime(note.freq, now + note.start);
-                    
                     gain.gain.setValueAtTime(0, now + note.start);
-                    gain.gain.linearRampToValueAtTime(0.3, now + note.start + 0.02); // Sharp attack
+                    gain.gain.linearRampToValueAtTime(0.3, now + note.start + 0.02);
                     gain.gain.exponentialRampToValueAtTime(0.001, now + note.end);
-
-                    osc.connect(gain);
-                    gain.connect(audioCtx.destination);
-                    osc.start(now + note.start);
-                    osc.stop(now + note.end);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(now + note.start); osc.stop(now + note.end);
                 });
             }
         }
@@ -109,9 +103,9 @@
                     ctx.fillRect(this.x, this.y, this.width, this.height);
                 }
                 if(canFly) {
-                    ctx.fillStyle = "black";
+                    ctx.fillStyle = "#e67e22";
                     ctx.font = "bold 12px Courier";
-                    ctx.fillText("FLY MODE", this.x - 5, this.y - 10);
+                    ctx.fillText("FLYING ACTIVE", this.x - 10, this.y - 10);
                 }
             },
             update() {
@@ -169,11 +163,8 @@
             obstacles = [];
             dino.y = GROUND_Y;
             dino.dy = 0;
-            
-            // --- Reset Cheat and Sequence ---
             canFly = false;
-            keySequence = "";
-            
+            spaceCount = 0;
             cancelAnimationFrame(animationFrameId);
             animate();
         }
@@ -186,7 +177,6 @@
                     dino.x + dino.width - 12 > obstacles[i].x &&
                     dino.y < obstacles[i].y + obstacles[i].height - 12 &&
                     dino.y + dino.height - 12 > obstacles[i].y) {
-                    
                     isGameOver = true;
                     playSound('death');
                     if (score > highScore) {
@@ -204,7 +194,7 @@
                 ctx.font = "24px Courier";
                 ctx.fillText("GAME OVER", canvas.width/2 - 60, canvas.height/2 - 10);
                 ctx.font = "14px Courier";
-                ctx.fillText("PRESS 'R' TO RESTART (CHEATS DISABLED)", canvas.width/2 - 150, canvas.height/2 + 25);
+                ctx.fillText("PRESS 'R' TO RESTART", canvas.width/2 - 80, canvas.height/2 + 25);
                 return;
             }
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -226,19 +216,34 @@
 
         const handleInput = (e) => {
             if (e.type === 'keydown') {
-                keySequence += e.key.toLowerCase();
-                // Check if last three letters were f-l-y
-                if (keySequence.endsWith("fly")) {
-                    canFly = true;
-                }
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    
+                    // Triple Space Logic
+                    const now = Date.now();
+                    if (now - lastSpaceTime < 500) {
+                        spaceCount++;
+                    } else {
+                        spaceCount = 1;
+                    }
+                    lastSpaceTime = now;
 
-                if (e.code === 'Space' || e.code === 'ArrowUp') {
+                    if (spaceCount === 3) {
+                        canFly = true;
+                    }
+
+                    dino.jump();
+                }
+                
+                if (e.code === 'ArrowUp') {
                     e.preventDefault();
                     dino.jump();
                 }
+                
                 if (canFly && e.code === 'ArrowDown') {
                     dino.dy = 8; 
                 }
+                
                 if (e.code === 'KeyR') resetGame();
             } else {
                 dino.jump();
