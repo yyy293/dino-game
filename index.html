@@ -6,7 +6,7 @@
     <title>Dino Game</title>
     <style>
         body { margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; overflow: hidden; }
-        canvas { border-bottom: 2px solid #535353; background-color: #fff; }
+        canvas { border-bottom: 2px solid #535353; background-color: #fff; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -55,6 +55,12 @@
                 }
                 this.y += this.dy;
                 this.draw();
+            },
+            jump() {
+                if (this.grounded && !isGameOver) {
+                    this.dy = JUMP_FORCE;
+                    this.grounded = false;
+                }
             }
         };
 
@@ -110,20 +116,17 @@
             if (isGameOver) {
                 ctx.fillStyle = "black";
                 ctx.font = "20px Courier";
-                ctx.fillText("GAME OVER - PRESS R TO RESTART", canvas.width/2 - 160, canvas.height/2);
+                ctx.fillText("GAME OVER", canvas.width/2 - 50, canvas.height/2 - 10);
+                ctx.font = "14px Courier";
+                ctx.fillText("DOUBLE CLICK or PRESS R TO RESTART", canvas.width/2 - 140, canvas.height/2 + 20);
                 return;
             }
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             scoreCounter++;
-            if (scoreCounter % 5 === 0) {
-                score++;
-            }
-            
-            if (score > 0 && score % 100 === 0 && scoreCounter % 5 === 0) {
-                gameSpeed += 0.1;
-            }
+            if (scoreCounter % 5 === 0) score++;
+            if (score > 0 && score % 100 === 0 && scoreCounter % 5 === 0) gameSpeed += 0.1;
 
             dino.update();
             handleObstacles();
@@ -136,24 +139,12 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && dino.grounded && !isGameOver) {
-                dino.dy = JUMP_FORCE;
-                dino.grounded = false;
-            }
-            if (e.code === 'KeyR') {
-                resetGame();
-            }
+            if (e.code === 'Space') dino.jump();
+            if (e.code === 'KeyR') resetGame();
         });
 
-        let imagesLoaded = 0;
-        const totalImages = 2;
-        const onImageLoad = () => {
-            imagesLoaded++;
-            if (imagesLoaded === totalImages) animate();
-        };
+        canvas.addEventListener('mousedown', () => {
+            dino.jump();
+        });
 
-        dinoImg.onload = onImageLoad;
-        cactusImg.onload = onImageLoad;
-    </script>
-</body>
-</html>
+        canvas.addEventListener('
