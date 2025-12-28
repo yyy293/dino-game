@@ -2,20 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Final Fixed Edition</title>
+    <title>Dino Warp: Grounded & Shattered</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
-        #startUI { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; z-index: 100; }
+        #startUI { position: absolute; width: 100%; height: 100%; background: rgba(0,0,0,0.9); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; z-index: 100; text-align: center; }
     </style>
 </head>
 <body>
     <div id="container">
         <div id="startUI" onclick="initGame()">
             <h1>DINO WARP</h1>
-            <p>CLICK TO ENABLE SOUND & START</p>
-            <p>Triple-Tap Space to Warp | Up/Down to fly</p>
+            <p>CLICK TO START & UNMUTE</p>
+            <p style="font-size: 12px; color: #888;">TRIPLE-SPACE: WARP | R: CANCEL WARP / RESTART</p>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -25,33 +25,32 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 800; canvas.height = 350;
 
-        // --- AUDIO ---
+        // --- AUDIO (Removed whoosh) ---
         const audio = {
             m1k: new Audio('audio/aplausos_2.mp3'),
             m10k: new Audio('audio/-audiotrimmer_adesehy.mp3'),
-            lose: new Audio('audio/directed-by-robert-b_voI2Z4T.mp3'),
-            whoosh: new Audio('audio/slowmo_whoosh.mp3')
+            lose: new Audio('audio/directed-by-robert-b_voI2Z4T.mp3')
         };
 
         function initGame() {
             document.getElementById('startUI').style.display = 'none';
-            // Unlock all audio for browser
+            // Unlock audio
             for(let s in audio) { audio[s].play().then(() => { audio[s].pause(); audio[s].currentTime = 0; }).catch(e => {}); }
             state.started = true;
             gameLoop();
         }
 
-        // --- STATE ---
         let state = {
             started: false, over: false, score: 0, speed: 6,
             canFly: false, spaceHits: 0, lastSpace: 0, frame: 0,
             m1kPlayed: false, m10kPlayed: false
         };
 
+        // Strict grounding at 270
         const dino = { x: 50, y: 270, dy: 0, ground: 270 };
         let obstacles = [], debris = [], stars = [], trail = [];
 
-        for(let i=0; i<50; i++) stars.push({x: Math.random()*800, y: Math.random()*200});
+        for(let i=0; i<60; i++) stars.push({x: Math.random()*800, y: Math.random()*200});
 
         function gameLoop() {
             if (state.over) return;
@@ -68,30 +67,29 @@
             if (state.score >= 1000 && !state.m1kPlayed) { audio.m1k.play(); state.m1kPlayed = true; }
             if (state.score >= 10000 && !state.m10kPlayed) { audio.m10k.play(); state.m10kPlayed = true; }
 
-            // Physics (FIX: Forced Grounding)
+            // Strict Physics
             if (!state.canFly) {
                 dino.dy += 0.8; 
                 dino.y += dino.dy;
-                if (dino.y > dino.ground) { dino.y = dino.ground; dino.dy = 0; }
+                if (dino.y >= dino.ground) { dino.y = dino.ground; dino.dy = 0; }
             } else {
                 trail.push({x: dino.x, y: dino.y + 15, life: 1});
             }
 
-            // Speed & Spawning
             if (!state.canFly) state.speed += 0.001; else state.speed += 0.05;
+            
             if (state.frame % Math.max(20, Math.floor(500/state.speed)) === 0) {
                 obstacles.push({x: 850, y: 270});
             }
 
-            // Obstacle Collision & Shatter
             obstacles = obstacles.filter(o => {
                 o.x -= state.speed;
-                // Collision check
+                // Collision
                 if (dino.x < o.x + 25 && dino.x + 40 > o.x && dino.y < o.y + 40 && dino.y + 40 > o.y) {
                     if (state.canFly) {
-                        // SHATTER CACTUS
-                        for(let i=0; i<10; i++) debris.push({x: o.x, y: o.y, vx: Math.random()*10-5, vy: -Math.random()*10, life: 1});
-                        return false; // Destroy cactus
+                        // SMASH TRIGGER
+                        for(let i=0; i<12; i++) debris.push({x: o.x, y: o.y, vx: Math.random()*12-6, vy: -Math.random()*12, life: 1});
+                        return false; 
                     } else {
                         state.over = true;
                         audio.lose.play();
@@ -100,55 +98,51 @@
                 return o.x > -50;
             });
 
-            // Clean up particles
-            debris.forEach((d, i) => { d.x += d.vx; d.y += d.vy; d.vy += 0.4; d.life -= 0.02; if(d.life <= 0) debris.splice(i, 1); });
+            debris.forEach((d, i) => { d.x += d.vx; d.y += d.vy; d.vy += 0.5; d.life -= 0.02; if(d.life <= 0) debris.splice(i, 1); });
             trail.forEach((t, i) => { t.x -= state.speed; t.life -= 0.05; if(t.life <= 0) trail.splice(i, 1); });
         }
 
         function draw() {
-            let isNight = (Math.sin(state.score/1000) < -0.5);
-            ctx.fillStyle = isNight ? "#0a0a1a" : "#f7f7f7";
+            let isNight = (Math.sin(state.score/1500) < -0.4);
+            ctx.fillStyle = isNight ? "#0d0d1a" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             let mainColor = isNight ? "#fff" : "#535353";
 
-            // Draw Stars
-            if(isNight) { ctx.fillStyle = "#fff"; stars.forEach(s => ctx.fillRect(s.x, s.y, 2, 2)); }
+            if(isNight) { ctx.fillStyle = "#fff"; stars.forEach(s => ctx.fillRect(s.x, s.y, 1, 1)); }
 
-            // Draw Trail
-            trail.forEach(t => { ctx.fillStyle = `rgba(255,100,0,${t.life})`; ctx.fillRect(t.x, t.y, 6, 6); });
+            trail.forEach(t => { ctx.fillStyle = `rgba(255,80,0,${t.life})`; ctx.fillRect(t.x, t.y, 6, 6); });
 
-            // Draw Debris
             debris.forEach(d => { ctx.fillStyle = mainColor; ctx.fillRect(d.x, d.y, 4, 4); });
 
-            // Draw Dino
+            // Dino
             ctx.fillStyle = mainColor;
-            ctx.fillRect(dino.x+15, dino.y, 20, 10); ctx.fillRect(dino.x+10, dino.y+10, 25, 20); // Head/Body
-            ctx.fillRect(dino.x, dino.y+12, 10, 10); // Tail
-            ctx.fillRect(dino.x+12, dino.y+30, 6, 10); ctx.fillRect(dino.x+25, dino.y+30, 6, 10); // Legs
-            ctx.fillStyle = (state.score > 5000 && isNight) ? "red" : (isNight ? "black" : "white");
-            ctx.fillRect(dino.x+30, dino.y+2, 4, 4); // Eye
+            ctx.fillRect(dino.x+15, dino.y, 20, 10); ctx.fillRect(dino.x+10, dino.y+10, 25, 20);
+            ctx.fillRect(dino.x, dino.y+12, 10, 10); 
+            ctx.fillRect(dino.x+12, dino.y+30, 6, 10); ctx.fillRect(dino.x+25, dino.y+30, 6, 10);
+            // Glowing eyes at night
+            ctx.fillStyle = (isNight && state.score > 5000) ? "red" : (isNight ? "black" : "white");
+            ctx.fillRect(dino.x+30, dino.y+2, 4, 4);
 
-            // Draw Cacti
+            // Cacti
             ctx.fillStyle = mainColor;
             obstacles.forEach(o => {
                 ctx.fillRect(o.x+10, o.y, 10, 40); ctx.fillRect(o.x, o.y+10, 10, 15); ctx.fillRect(o.x+20, o.y+15, 10, 12);
             });
 
-            // --- SPEEDOMETER UI ---
-            ctx.fillStyle = state.speed > 40 ? "red" : mainColor;
-            ctx.font = "bold 18px Courier New";
+            // SPEEDOMETER HUD
+            ctx.fillStyle = state.speed > 40 ? "#ff4400" : mainColor;
+            ctx.font = "bold 16px Courier New";
             ctx.textAlign = "left";
-            ctx.fillText(`VELOCITY: ${Math.floor(state.speed * 15)} KM/H`, 20, 330);
+            ctx.fillText(`VEL: ${Math.floor(state.speed * 12)} KM/H`, 20, 330);
             if(state.speed > 40) ctx.fillText(`MACH: ${(state.speed/45).toFixed(1)}`, 20, 310);
 
-            // Score
             ctx.textAlign = "right";
             ctx.fillText(Math.floor(state.score).toString().padStart(5, '0'), 780, 40);
 
             if (state.over) {
                 ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,800,350);
-                ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("GAME OVER - PRESS R TO RESTART", 400, 180);
+                ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("WASTED - PRESS R TO TRY AGAIN", 400, 180);
             }
         }
 
@@ -162,11 +156,11 @@
             }
             if (e.code === 'KeyR') {
                 if (state.over) location.reload();
-                else if (state.canFly) { audio.whoosh.play(); state.canFly = false; state.speed = 10; }
+                else if (state.canFly) { state.canFly = false; state.speed = 10; }
             }
             if (state.canFly) {
-                if (e.code === 'ArrowUp') dino.y -= 40;
-                if (e.code === 'ArrowDown') dino.y += 40;
+                if (e.code === 'ArrowUp') dino.y -= 45;
+                if (e.code === 'ArrowDown') dino.y += 45;
                 if (dino.y < 20) dino.y = 20; if (dino.y > 270) dino.y = 270;
             }
         });
