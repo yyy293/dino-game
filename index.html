@@ -2,19 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Sonic Boom Edition</title>
+    <title>Dino Warp: Hyper-Speed Edition</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
-        #startUI { position: absolute; width: 100%; height: 100%; background: #000; color: #0f0; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; z-index: 100; text-align: center; border: 2px solid #0f0; }
+        #overlay { position: absolute; width: 100%; height: 100%; background: #000; color: #ff0000; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; z-index: 1000; }
+        h1 { font-size: 32px; letter-spacing: 8px; margin: 0; }
+        .sub { color: #555; margin-top: 10px; font-size: 14px; }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="startUI" onclick="initGame()">
-            <h1 style="letter-spacing:10px;">SYSTEMS OFFLINE</h1>
-            <p style="color: white;">[ CLICK TO ACTIVATE AUDIO & IGNITE ENGINES ]</p>
+        <div id="overlay" onclick="startEngine()">
+            <h1>SYSTEM OFFLINE</h1>
+            <p class="sub">CLICK TO ACTIVATE ENGINES & AUDIO</p>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -24,38 +26,49 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 800; canvas.height = 350;
 
-        // --- AUDIO ENGINE ---
-        const audio = {
-            m1k: new Audio('audio/aplausos_2.mp3'),
-            m10k: new Audio('audio/-audiotrimmer_adesehy.mp3'),
-            lose: new Audio('audio/directed-by-robert-b_voI2Z4T.mp3')
+        // --- STRENGTHENED AUDIO ENGINE ---
+        const audioData = {
+            m1k: 'audio/aplausos_2.mp3',
+            m10k: 'audio/-audiotrimmer_adesehy.mp3',
+            lose: 'audio/directed-by-robert-b_voI2Z4T.mp3'
         };
+        const snd = {};
 
-        function initGame() {
-            document.getElementById('startUI').style.display = 'none';
-            // Force Audio Unlock
-            for(let s in audio) { 
-                audio[s].play().then(() => { audio[s].pause(); audio[s].currentTime = 0; }).catch(e => console.log("Unlocking...")); 
+        function startEngine() {
+            // Remove overlay
+            document.getElementById('overlay').style.display = 'none';
+            
+            // Initializing Audio Context through user gesture
+            for (let key in audioData) {
+                snd[key] = new Audio(audioData[key]);
+                snd[key].load(); // Preload
+                // Unmute trick: Play/Pause instantly
+                const promise = snd[key].play();
+                if (promise !== undefined) {
+                    promise.then(() => { snd[key].pause(); snd[key].currentTime = 0; }).catch(e => console.log("Audio Lock Active"));
+                }
             }
+            
             state.started = true;
             gameLoop();
         }
 
         let state = {
             started: false, over: false, score: 0, speed: 6,
-            highScore: localStorage.getItem('dinoHighScore') || 0,
+            highScore: localStorage.getItem('dinoHS') || 0,
             canFly: false, spaceHits: 0, lastSpace: 0, frame: 0,
-            m1kPlayed: false, m10kPlayed: false,
-            sonicBoomSize: 0
+            m1kPlayed: false, m10kPlayed: false, cracks: []
         };
 
         const dino = { x: 50, y: 270, dy: 0, ground: 270 };
-        let obstacles = [], debris = [], stars = [], trail = [], cracks = [];
+        let obstacles = [], debris = [], stars = [], trail = [];
 
-        for(let i=0; i<60; i++) stars.push({x: Math.random()*800, y: Math.random()*200});
+        for(let i=0; i<80; i++) {
+            stars.push({ x: Math.random()*800, y: Math.random()*250, size: Math.random()*2 + 1 });
+        }
 
         function gameLoop() {
-            if (state.over) return;
+            if (state.over || !state.started) return;
             update();
             draw();
             requestAnimationFrame(gameLoop);
@@ -65,108 +78,127 @@
             state.frame++;
             state.score += state.canFly ? 5 : 0.15;
             
-            // Audio Logic
-            if (state.score >= 1000 && !state.m1kPlayed) { audio.m1k.play(); state.m1kPlayed = true; }
-            if (state.score >= 10000 && !state.m10kPlayed) { audio.m10k.play(); state.m10kPlayed = true; }
+            // Sound triggers
+            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play(); state.m1kPlayed = true; }
+            if (state.score >= 10000 && !state.m10kPlayed) { snd.m10k.play(); state.m10kPlayed = true; }
 
-            // Physics Lock
+            // Physics
             if (!state.canFly) {
-                dino.dy += 0.8; 
-                dino.y += dino.dy;
+                dino.dy += 0.8; dino.y += dino.dy;
                 if (dino.y >= dino.ground) { dino.y = dino.ground; dino.dy = 0; }
             } else {
-                trail.push({x: dino.x, y: dino.y + 15, life: 1});
+                trail.push({x: dino.x, y: dino.y + 15, l: 1});
             }
 
-            state.speed += state.canFly ? 0.05 : 0.001;
-            
-            // Sonic Boom Trigger
-            if (state.speed >= 44.9 && state.speed <= 45.5) state.sonicBoomSize = 1;
+            state.speed += state.canFly ? 0.08 : 0.002;
+            let mach = state.speed / 45;
 
-            if (state.frame % Math.max(20, Math.floor(500/state.speed)) === 0) obstacles.push({x: 850, y: 270});
+            // Shatter logic (Mach 2+)
+            if (mach >= 2 && state.frame % 12 === 0 && state.cracks.length < 35) {
+                state.cracks.push({
+                    x1: 10 + Math.random()*180, y1: 280 + Math.random()*60,
+                    x2: 10 + Math.random()*180, y2: 280 + Math.random()*60
+                });
+            }
 
+            // Obstacle handling
+            if (state.frame % Math.max(12, Math.floor(400/state.speed)) === 0) obstacles.push({x: 850, y: 270});
             obstacles = obstacles.filter(o => {
                 o.x -= state.speed;
-                if (dino.x < o.x + 25 && dino.x + 40 > o.x && dino.y < o.y + 40 && dino.y + 40 > o.y) {
+                if (dino.x < o.x + 25 && dino.x + 40 > o.x && dino.y < o.y + 35 && dino.y + 40 > o.y) {
                     if (state.canFly) {
-                        for(let i=0; i<10; i++) debris.push({x: o.x, y: o.y, vx: Math.random()*12-6, vy: -Math.random()*12, life: 1});
+                        for(let i=0; i<8; i++) debris.push({x: o.x, y: o.y, vx: Math.random()*10-5, vy: -Math.random()*10, l: 1});
                         return false; 
                     } else {
                         state.over = true;
-                        if (state.score > state.highScore) localStorage.setItem('dinoHighScore', Math.floor(state.score));
-                        audio.lose.play();
+                        if (state.score > state.highScore) {
+                            state.highScore = Math.floor(state.score);
+                            localStorage.setItem('dinoHS', state.highScore);
+                        }
+                        snd.lose.play();
                     }
                 }
                 return o.x > -50;
             });
 
-            debris.forEach((d, i) => { d.x += d.vx; d.y += d.vy; d.vy += 0.5; d.life -= 0.02; if(d.life <= 0) debris.splice(i, 1); });
-            trail.forEach((t, i) => { t.x -= state.speed; t.life -= 0.05; if(t.life <= 0) trail.splice(i, 1); });
-            if (state.sonicBoomSize > 0) state.sonicBoomSize += 0.1;
-            if (state.speed / 45 >= 2 && cracks.length < 20) {
-                cracks.push({x1: 15 + Math.random()*150, y1: 290 + Math.random()*50, x2: 15 + Math.random()*150, y2: 290 + Math.random()*50});
-            }
+            debris.forEach((d, i) => { d.x += d.vx; d.y += d.vy; d.vy += 0.5; d.l -= 0.02; if(d.l <= 0) debris.splice(i, 1); });
+            trail.forEach((t, i) => { t.x -= state.speed; t.l -= 0.05; if(t.l <= 0) trail.splice(i, 1); });
+            
+            // Star Streaking
+            stars.forEach(s => {
+                s.x -= (state.speed * 0.5);
+                if (s.x < -100) s.x = 900;
+            });
         }
 
         function draw() {
-            let isNight = (Math.sin(state.score/1500) < -0.4);
+            let isNight = (Math.sin(state.score/1500) < -0.3);
             ctx.fillStyle = isNight ? "#050510" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            let mainColor = isNight ? "#fff" : "#535353";
+            let color = isNight ? "#fff" : "#535353";
+            let mach = state.speed / 45;
 
-            // Stars
-            if(isNight) { ctx.fillStyle = "#fff"; stars.forEach(s => ctx.fillRect(s.x, s.y, 1, 1)); }
+            // Draw Stars (Streaking at Mach 3)
+            ctx.strokeStyle = "#fff";
+            ctx.fillStyle = "#fff";
+            stars.forEach(s => {
+                if (mach >= 3) {
+                    ctx.lineWidth = s.size;
+                    ctx.beginPath();
+                    ctx.moveTo(s.x, s.y);
+                    ctx.lineTo(s.x + 50, s.y); // Long streaks
+                    ctx.stroke();
+                } else {
+                    ctx.fillRect(s.x, s.y, s.size, s.size);
+                }
+            });
 
-            // Sonic Boom Visual
-            if (state.sonicBoomSize > 0 && state.sonicBoomSize < 10) {
-                ctx.strokeStyle = `rgba(255,255,255,${1 - state.sonicBoomSize/10})`;
-                ctx.lineWidth = 4;
-                ctx.beginPath();
-                ctx.arc(dino.x, dino.y+20, state.sonicBoomSize * 20, 1.5*Math.PI, 0.5*Math.PI);
-                ctx.stroke();
-            }
-
-            trail.forEach(t => { ctx.fillStyle = `rgba(255,100,0,${t.life})`; ctx.fillRect(t.x, t.y, 6, 6); });
-            debris.forEach(d => { ctx.fillStyle = mainColor; ctx.fillRect(d.x, d.y, 4, 4); });
+            trail.forEach(t => { ctx.fillStyle = `rgba(255,150,0,${t.l})`; ctx.fillRect(t.x, t.y, 6, 6); });
+            debris.forEach(d => { ctx.fillStyle = color; ctx.fillRect(d.x, d.y, 4, 4); });
 
             // Dino
-            ctx.fillStyle = mainColor;
+            ctx.fillStyle = color;
             ctx.fillRect(dino.x+15, dino.y, 20, 10); ctx.fillRect(dino.x+10, dino.y+10, 25, 20);
             ctx.fillRect(dino.x, dino.y+12, 10, 10); 
             ctx.fillRect(dino.x+12, dino.y+30, 6, 10); ctx.fillRect(dino.x+25, dino.y+30, 6, 10);
             ctx.fillStyle = (isNight && state.score > 5000) ? "red" : (isNight ? "black" : "white");
             ctx.fillRect(dino.x+30, dino.y+2, 4, 4);
 
-            // Cacti
-            ctx.fillStyle = mainColor;
+            // Obstacles
+            ctx.fillStyle = color;
             obstacles.forEach(o => { ctx.fillRect(o.x+10, o.y, 10, 40); ctx.fillRect(o.x, o.y+10, 10, 15); ctx.fillRect(o.x+20, o.y+15, 10, 12); });
 
-            // SPEEDOMETER
-            let mach = state.speed / 45;
+            // --- SPEEDOMETER ---
             ctx.save();
             if (mach >= 2) {
-                ctx.translate(Math.random()*4-2, Math.random()*4-2);
-                ctx.fillStyle = (state.frame % 6 < 3) ? "#f00" : "#fff";
-                cracks.forEach(c => { ctx.strokeStyle = "rgba(255,0,0,0.5)"; ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); });
+                ctx.translate(Math.random()*6-3, Math.random()*6-3);
+                ctx.fillStyle = (state.frame % 4 < 2) ? "#f00" : "#fff";
             } else {
-                ctx.fillStyle = mach >= 1 ? "#ff4400" : mainColor;
+                ctx.fillStyle = (mach >= 1) ? "#ff9900" : color;
             }
             ctx.font = "bold 16px Courier New";
+            ctx.textAlign = "left";
             ctx.fillText(`VEL: ${Math.floor(state.speed * 12)} KM/H`, 20, 330);
             ctx.fillText(`MACH: ${mach.toFixed(1)}`, 20, 310);
-            if (mach >= 2) ctx.fillText("CORE FAILURE", 20, 290);
+            
+            ctx.strokeStyle = "rgba(255, 0, 0, 0.5)";
+            ctx.lineWidth = 1;
+            state.cracks.forEach(c => {
+                ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke();
+            });
             ctx.restore();
 
-            // SCORE
-            ctx.fillStyle = mainColor; ctx.textAlign = "right";
-            ctx.fillText(`HI ${state.highScore.toString().padStart(5, '0')} ${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
+            // --- HUD ---
+            ctx.fillStyle = color;
+            ctx.textAlign = "right";
+            ctx.fillText(`HI ${state.highScore.toString().padStart(5, '0')}  ${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
 
             if (state.over) {
-                ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,800,350);
+                ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(0,0,800,350);
                 ctx.fillStyle = "#fff"; ctx.textAlign = "center"; 
-                ctx.fillText("SYSTEM CRITICAL: PILOT LOST", 400, 175);
-                ctx.font = "12px Courier New"; ctx.fillText("PRESS R TO REBOOT", 400, 200);
+                ctx.fillText("STRUCTURAL FAILURE", 400, 160);
+                ctx.font = "14px Courier New"; ctx.fillText("PRESS R TO REBOOT", 400, 190);
             }
         }
 
