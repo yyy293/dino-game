@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game</title>
+    <title>Dino Game - Birds & Ducking</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -14,10 +14,10 @@
         body.night { background-color: #202124; }
         #container { 
             position: relative; width: 800px; height: 200px; 
-            background-color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            background-color: #fff; border-bottom: 2px solid #535353;
             transition: background-color 0.5s;
         }
-        body.night #container { background-color: #202124; }
+        body.night #container { background-color: #202124; border-color: #DDD; }
         canvas { display: block; width: 100%; height: 100%; }
     </style>
 </head>
@@ -31,204 +31,193 @@
         canvas.width = 800;
         canvas.height = 200;
 
-        // Audio Objects
+        // Audio
         const snd1k = new Audio('aplausos_2.mp3');
         const snd10k = new Audio('-audiotrimmer_adesehy.mp3');
         const sndGameOver = new Audio('directed-by-robert-b_voI2Z4T.mp3');
 
-        // Constants
+        function stopAllSounds() {
+            [snd1k, snd10k, sndGameOver].forEach(s => { s.pause(); s.currentTime = 0; });
+        }
+
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
         const GROUND_Y = 150;
-        const INITIAL_SPEED = 6;
-        const SPEED_INCREMENT = 0.002;
-
-        // Game state
-        let gameSpeed = INITIAL_SPEED;
+        let gameSpeed = 6;
         let score = 0;
         let isGameOver = false;
         let gameStarted = false;
         let obstacles = [];
         let frameCount = 0;
-        let animationFrameId;
         let isNight = false;
-        let showNoice = false;
-        let noiceTimer = 0;
-        
-        // Sound flags to prevent looping
         let hasPlayed1k = false;
         let hasPlayed10k = false;
 
-        // Cheats
+        // Cheats & Movement
         let canFly = false;
         let isInvincible = false;
+        let isDucking = false;
         let spaceCount = 0;
         let lastSpaceTime = 0;
 
-        // Basic beep sound for jumping
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playBeep(freq, type = 'square', duration = 0.1) {
-            if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const g = audioCtx.createGain();
-            osc.type = type;
-            osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-            g.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
-            osc.connect(g); g.connect(audioCtx.destination);
-            osc.start(); osc.stop(audioCtx.currentTime + duration);
+        function drawDino(x, y, color, ducking) {
+            ctx.fillStyle = color;
+            if (!ducking) {
+                ctx.fillRect(x, y + 18, 6, 10); // Tail
+                ctx.fillRect(x + 6, y + 10, 16, 20); // Body
+                ctx.fillRect(x + 16, y + 4, 8, 10); // Neck
+                ctx.fillRect(x + 18, y, 22, 14); // Head
+                ctx.fillStyle = isNight ? "#202124" : "#FFF";
+                ctx.fillRect(x + 24, y + 3, 4, 4); // Eye
+                ctx.fillStyle = color;
+                let legOffset = (Math.floor(frameCount / 10) % 2 === 0) ? 0 : 2;
+                ctx.fillRect(x + 8, y + 30 + legOffset, 5, 8);
+                ctx.fillRect(x + 16, y + 30 - legOffset, 5, 8);
+            } else {
+                ctx.fillRect(x, y + 25, 30, 15); // Duck Body
+                ctx.fillRect(x + 25, y + 22, 20, 12); // Duck Head
+                ctx.fillStyle = isNight ? "#202124" : "#FFF";
+                ctx.fillRect(x + 38, y + 25, 4, 4); 
+                ctx.fillStyle = color;
+                ctx.fillRect(x + 5, y + 38, 5, 4);
+                ctx.fillRect(x + 20, y + 38, 5, 4);
+            }
+        }
+
+        function drawBird(x, y) {
+            ctx.fillStyle = isNight ? "#DDD" : "#535353";
+            ctx.fillRect(x, y, 20, 10); // Body
+            ctx.fillRect(x - 5, y + 2, 5, 5); // Tail
+            ctx.fillRect(x + 20, y - 2, 10, 8); // Head
+            // Flapping wing
+            let wingY = (Math.floor(frameCount / 10) % 2 === 0) ? y - 10 : y + 5;
+            ctx.fillRect(x + 5, wingY, 10, 10);
+        }
+
+        function drawCactus(x, y, width, height) {
+            ctx.fillStyle = isNight ? "#DDD" : "#535353";
+            const trunkW = 12;
+            ctx.fillRect(x + (width/2 - trunkW/2), y, trunkW, height);
+            ctx.fillRect(x, y + height/2.5, 8, 5); 
+            ctx.fillRect(x, y + height/2.5 - 12, 5, 15);
+            ctx.fillRect(x + width - 8, y + height/2, 8, 5);
+            ctx.fillRect(x + width - 5, y + height/2 - 12, 5, 15);
         }
 
         const dino = {
-            x: 50, y: GROUND_Y, width: 44, height: 47, dy: 0,
-            isJumping: false,
-            draw() {
-                const color = isNight ? "#DDD" : "#535353";
-                ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : color);
-                ctx.fillRect(this.x, this.y, 40, 40);
-            },
+            x: 50, y: GROUND_Y, dy: 0,
             update() {
                 if (!canFly) {
                     this.dy += GRAVITY;
                     this.y += this.dy;
-                    if (this.y > GROUND_Y) { this.y = GROUND_Y; this.dy = 0; this.isJumping = false; }
+                    if (this.y > GROUND_Y) { this.y = GROUND_Y; this.dy = 0; }
                 }
-                this.draw();
+                const color = isInvincible ? "#f1c40f" : (canFly ? "#3498db" : (isNight ? "#DDD" : "#535353"));
+                drawDino(this.x, this.y, color, isDucking);
             }
         };
 
         class Obstacle {
-            constructor(extraX = 0) {
-                this.x = canvas.width + extraX;
-                this.width = 20 + Math.random() * 20;
-                this.height = 30 + Math.random() * 20;
-                this.y = GROUND_Y + (40 - this.height);
+            constructor(type) {
+                this.type = type; // 'cactus' or 'bird'
+                this.x = canvas.width;
+                if (type === 'cactus') {
+                    this.width = 25;
+                    this.height = 35 + Math.random() * 15;
+                    this.y = GROUND_Y + 40 - this.height;
+                } else {
+                    this.width = 35;
+                    this.height = 20;
+                    // Three bird heights: High (duck), Mid (jump/duck), Low (jump)
+                    const heights = [GROUND_Y - 50, GROUND_Y - 10, GROUND_Y + 10];
+                    this.y = heights[Math.floor(Math.random() * heights.length)];
+                }
             }
             update() {
                 this.x -= gameSpeed;
-                ctx.fillStyle = isNight ? "#DDD" : "#535353";
-                ctx.fillRect(this.x, this.y, this.width, this.height);
+                if (this.type === 'cactus') drawCactus(this.x, this.y, this.width, this.height);
+                else drawBird(this.x, this.y);
             }
         }
 
         function resetGame() {
-            // STOP CHEATS ON R
-            canFly = false;
-            isInvincible = false;
-            
-            // Reset state
-            score = 0;
-            gameSpeed = INITIAL_SPEED;
-            isGameOver = false;
-            obstacles = [];
-            isNight = false;
-            showNoice = false;
-            hasPlayed1k = false;
-            hasPlayed10k = false;
-            
+            stopAllSounds();
+            canFly = false; isInvincible = false; isDucking = false;
+            score = 0; gameSpeed = 6; isGameOver = false;
+            obstacles = []; isNight = false;
+            hasPlayed1k = false; hasPlayed10k = false;
             document.body.classList.remove('night');
-            cancelAnimationFrame(animationFrameId);
             animate();
         }
 
         function animate() {
+            if (isGameOver) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            frameCount++;
+            score += 0.15;
+            let currentScore = Math.floor(score);
+            
             isNight = Math.floor(score / 700) % 2 === 1;
             document.body.classList.toggle('night', isNight);
 
-            if (isGameOver) {
-                ctx.fillStyle = isNight ? "#DDD" : "#535353";
-                ctx.textAlign = "center";
-                ctx.font = "20px Courier New";
-                ctx.fillText("GAME OVER - PRESS R TO RESTART", canvas.width / 2, 100);
-                return;
-            }
+            if (currentScore >= 1000 && !hasPlayed1k) { snd1k.play(); hasPlayed1k = true; }
+            if (currentScore >= 10000 && !hasPlayed10k) { snd10k.play(); hasPlayed10k = true; }
 
-            score += 0.15;
-            let currentScore = Math.floor(score);
-
-            // Score Sound Logic
-            if (currentScore >= 1000 && !hasPlayed1k) {
-                snd1k.play();
-                hasPlayed1k = true;
-            }
-            if (currentScore >= 10000 && !hasPlayed10k) {
-                snd10k.play();
-                hasPlayed10k = true;
-                showNoice = true;
-                noiceTimer = 120;
-            }
-
-            gameSpeed += SPEED_INCREMENT;
-            if (frameCount % Math.max(30, Math.floor(60 - gameSpeed)) === 0) {
-                if (Math.random() < 0.02) {
-                    obstacles.push(new Obstacle());
-                    if (score > 1000 && Math.random() < (score / 15000)) {
-                        obstacles.push(new Obstacle(40)); 
-                    }
-                }
+            gameSpeed += 0.0015;
+            if (frameCount % 100 === 0) {
+                let type = (score > 500 && Math.random() > 0.5) ? 'bird' : 'cactus';
+                obstacles.push(new Obstacle(type));
             }
 
             dino.update();
 
             obstacles = obstacles.filter(obs => {
                 obs.update();
+                let hitX = dino.x, hitY = isDucking ? dino.y + 20 : dino.y;
+                let hitW = isDucking ? 45 : 30, hitH = isDucking ? 20 : 35;
+
                 if (!isInvincible && 
-                    dino.x < obs.x + obs.width && dino.x + 35 > obs.x && 
-                    dino.y < obs.y + obs.height && dino.y + 35 > obs.y) {
-                    
+                    hitX < obs.x + obs.width && hitX + hitW > obs.x && 
+                    hitY < obs.y + obs.height && hitY + hitH > obs.y) {
                     isGameOver = true;
-                    sndGameOver.play(); // Player loses sound
+                    sndGameOver.play();
+                    ctx.fillStyle = isNight ? "#DDD" : "#535353";
+                    ctx.textAlign = "center";
+                    ctx.fillText("GAME OVER - PRESS R", canvas.width / 2, 100);
                 }
                 return obs.x > -50;
             });
 
-            // UI
             ctx.fillStyle = isNight ? "#DDD" : "#535353";
             ctx.textAlign = "right";
-            ctx.font = "20px Courier New";
             ctx.fillText(currentScore.toString().padStart(5, '0'), canvas.width - 20, 30);
-
-            if (showNoice && noiceTimer > 0) {
-                ctx.textAlign = "center";
-                ctx.font = "30px Courier New";
-                ctx.fillText("NOICE", canvas.width / 2, 60);
-                noiceTimer--;
-            }
-
-            frameCount++;
-            animationFrameId = requestAnimationFrame(animate);
+            requestAnimationFrame(animate);
         }
 
         window.addEventListener('keydown', e => {
-            if (e.code === 'Space') {
+            if (e.code === 'Space' || e.code === 'ArrowUp') {
                 if (!gameStarted) { gameStarted = true; animate(); }
-                if (!dino.isJumping) { 
-                    dino.dy = JUMP_FORCE; 
-                    dino.isJumping = true; 
-                    playBeep(400); 
+                if (dino.y >= GROUND_Y && !isDucking) dino.dy = JUMP_FORCE;
+                if (e.code === 'Space') {
+                    let now = Date.now();
+                    if (now - lastSpaceTime < 300) spaceCount++; else spaceCount = 1;
+                    lastSpaceTime = now;
+                    if (spaceCount >= 3) { canFly = true; isInvincible = true; }
                 }
-                
-                // Cheat Trigger: Triple Space
-                let now = Date.now();
-                if (now - lastSpaceTime < 300) spaceCount++; else spaceCount = 1;
-                lastSpaceTime = now;
-                if (spaceCount >= 3) { canFly = true; isInvincible = true; }
             }
-
+            if (e.code === 'ArrowDown') isDucking = true;
             if (e.code === 'KeyR') resetGame();
-
             if (canFly) {
-                if (e.code === 'ArrowUp') dino.y -= 20;
-                if (e.code === 'ArrowDown') dino.y += 20;
+                if (e.code === 'ArrowUp') dino.y -= 25;
+                if (e.code === 'ArrowDown') dino.y += 25;
             }
         });
 
-        // Initial message
+        window.addEventListener('keyup', e => { if (e.code === 'ArrowDown') isDucking = false; });
+
         ctx.fillStyle = "#535353";
         ctx.textAlign = "center";
-        ctx.font = "20px Courier New";
-        ctx.fillText("PRESS SPACE TO START", canvas.width / 2, 100);
+        ctx.fillText("SPACE TO START | DUCK WITH DOWN ARROW", canvas.width / 2, 100);
     </script>
 </body>
 </html>
