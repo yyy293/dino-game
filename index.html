@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Pilot Edition</title>
+    <title>Dino Warp: Flight Master</title>
     <style>
         body { margin: 0; background: #050510; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #708090; border-bottom: 6px solid #2d2d44; overflow: hidden; transition: background 2s; }
@@ -14,8 +14,8 @@
 <body>
     <div id="container">
         <div id="gui" onclick="startOrRestart()">
-            <div class="pixel-btn" id="btn-text">ENGAGE WARP</div>
-            <p style="margin-top: 15px;">3x SPACE to Fly | Up/Down Arrows to Pilot</p>
+            <div class="pixel-btn">ENGAGE WARP</div>
+            <p style="margin-top: 15px;">TAP SPACE 3 TIMES TO FLY!</p>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -35,29 +35,25 @@
 
         let state = {
             started: false, over: false, score: 0, speed: 6,
-            frame: 0, m1kPlayed: false, isNight: false,
-            jumpCount: 0, isFlying: false, boomScale: 0,
-            keys: {}
+            frame: 0, isNight: false, jumpCount: 0, 
+            isFlying: false, keys: {}, particles: []
         };
 
-        const dino = { x: 50, y: GROUND_Y - 44, dy: 0 };
-        let obstacles = [], stars = [], clouds = [], dust = [];
+        const dino = { x: 50, y: GROUND_Y - 44, dy: 0, w: 40, h: 44 };
+        let obstacles = [], stars = [];
 
-        for(let i=0; i<60; i++) stars.push({x: Math.random()*800, y: Math.random()*250, r: 1 + Math.random()*2, s: 0.5 + Math.random()});
-        for(let i=0; i<4; i++) clouds.push({x: Math.random()*800, y: 40 + Math.random()*60, w: 60});
+        for(let i=0; i<60; i++) stars.push({x: Math.random()*800, y: Math.random()*250, s: 0.5 + Math.random()});
 
         function startOrRestart() {
-            for (let s in snd) { snd[s].load(); snd[s].play().then(() => { snd[s].pause(); snd[s].currentTime = 0; }).catch(() => {}); }
-            state.started = true; state.over = false; state.score = 0; state.speed = 6;
-            state.m1kPlayed = false; state.jumpCount = 0; state.isFlying = false; state.boomScale = 0;
-            obstacles = []; dust = []; dino.y = GROUND_Y - 44; dino.dy = 0;
+            // Firefox Audio Unlock
+            for (let s in snd) { snd[s].load(); snd[s].play().then(()=> {snd[s].pause(); snd[s].currentTime=0;}).catch(()=>{}); }
+            state.started = true; state.over = false; state.score = 0; state.speed = 7;
+            state.jumpCount = 0; state.isFlying = false; state.particles = [];
+            obstacles = []; dino.y = GROUND_Y - 44; dino.dy = 0;
             document.getElementById('gui').style.display = 'none';
         }
 
         function drawDino(x, y) {
-            ctx.save();
-            if (state.speed > 15) ctx.translate(Math.random()*2, Math.random()*2);
-            
             ctx.fillStyle = "#548d44";
             ctx.fillRect(x + 18, y, 22, 18); // Head
             ctx.fillStyle = "#d0f0c0"; ctx.fillRect(x + 10, y + 15, 25, 22); // Belly
@@ -65,61 +61,59 @@
             ctx.fillRect(x, y + 18, 10, 12); // Tail
             ctx.fillStyle = "#fff"; ctx.fillRect(x + 32, y + 4, 4, 4); // Eye
             
-            // Animation for legs
-            let legShift = state.isFlying ? Math.sin(state.frame * 0.5) * 5 : (Math.floor(state.frame / (20/state.speed)) % 2 === 0 ? 0 : 5);
+            let legShift = state.isFlying ? Math.sin(state.frame * 0.4) * 5 : (Math.floor(state.frame / 5) % 2 * 5);
             ctx.fillStyle = "#3a6330"; 
             ctx.fillRect(x + 12, y + 36 + legShift, 7, 8);
             ctx.fillRect(x + 26, y + 36 - legShift, 7, 8);
-            ctx.restore();
         }
 
         function update() {
             if (!state.started || state.over) return;
-            state.frame++; state.score += state.speed / 50;
+            state.frame++; state.score += state.speed / 40;
             state.isNight = Math.floor(state.score / 500) % 2 === 1;
 
-            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play().catch(()=>{}); state.m1kPlayed = true; }
-
-            // FLIGHT CONTROLS
+            // FLIGHT & MOVEMENT
             if (state.isFlying) {
-                if (state.keys['ArrowUp']) dino.y -= 5;
-                if (state.keys['ArrowDown']) dino.y += 5;
-                if (dino.y < 20) dino.y = 20; // Ceiling
+                if (state.keys['ArrowUp']) dino.y -= 6;
+                if (state.keys['ArrowDown']) dino.y += 6;
             } else {
-                dino.dy += 0.8; // Gravity
+                dino.dy += 0.8;
                 dino.y += dino.dy;
             }
 
-            // Landing Logic
+            // Floor & Ceiling
             if (dino.y > GROUND_Y - 44) { 
                 dino.y = GROUND_Y - 44; dino.dy = 0; 
-                state.jumpCount = 0; state.isFlying = false; 
+                state.isFlying = false; state.jumpCount = 0; 
             }
+            if (dino.y < 10) dino.y = 10;
 
-            // Dust if on ground
+            // DUST PARTICLES (Solid pixels for Firefox)
             if (dino.y >= GROUND_Y - 45) {
-                if (state.frame % 3 === 0) dust.push({ x: dino.x, y: GROUND_Y - 5, size: 2 + Math.random() * 4, life: 1 });
+                state.particles.push({x: dino.x + 5, y: GROUND_Y - 5, life: 20});
             }
+            state.particles.forEach(p => {
+                p.x -= state.speed;
+                p.y -= 1;
+                p.life--;
+            });
+            state.particles = state.particles.filter(p => p.life > 0);
 
-            dust.forEach(p => { p.x -= state.speed; p.y -= Math.random() * 2; p.life -= 0.05; });
-            dust = dust.filter(p => p.life > 0);
-
-            // Speed & Warp Effects
-            state.speed += 0.003;
+            state.speed += 0.002;
             stars.forEach(s => { s.x -= state.speed * s.s; if(s.x < -100) s.x = 850; });
 
-            if (state.frame % Math.max(25, Math.floor(500/state.speed)) === 0) {
-                let type = (state.score > 400 && Math.random() > 0.6) ? 'ptero' : 'cactus';
-                let obsY = (type === 'ptero' && Math.random() > 0.5) ? GROUND_Y - 85 : GROUND_Y - 40;
+            // Obstacles
+            if (state.frame % Math.max(30, Math.floor(500/state.speed)) === 0) {
+                let type = (state.score > 400 && Math.random() > 0.5) ? 'ptero' : 'cactus';
+                let obsY = (type === 'ptero') ? GROUND_Y - (40 + Math.random()*100) : GROUND_Y - 40;
                 obstacles.push({x: 850, y: obsY, w: 30, h: 40, type: type});
             }
 
             obstacles.forEach(o => {
                 o.x -= state.speed;
-                if (dino.x < o.x + o.w && dino.x + 35 > o.x && dino.y < o.y + o.h && dino.y + 44 > o.y) {
+                if (dino.x < o.x + o.w && dino.x + 35 > o.x && dino.y < o.y + o.h && dino.y + 40 > o.y) {
                     state.over = true; snd.lose.play().catch(()=>{});
                     document.getElementById('gui').style.display = 'flex';
-                    document.getElementById('btn-text').innerText = "RE-ENGAGE";
                 }
             });
             obstacles = obstacles.filter(o => o.x > -100);
@@ -129,35 +123,40 @@
             ctx.fillStyle = state.isNight ? "#050510" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Warp Stars
+            // Star Beams
             ctx.fillStyle = "#fff";
-            let beamLength = Math.max(0, (state.speed - 10) * 8); 
-            stars.forEach(s => { ctx.fillRect(s.x, s.y, 2 + beamLength, 2); });
+            let beam = Math.max(0, (state.speed - 9) * 10);
+            stars.forEach(s => { ctx.fillRect(s.x, s.y, 2 + beam, 2); });
 
             // Dust
-            dust.forEach(p => {
-                ctx.fillStyle = state.isNight ? `rgba(100, 100, 150, ${p.life})` : `rgba(150, 150, 150, ${p.life})`;
-                ctx.fillRect(p.x, p.y, p.size, p.size);
-            });
+            ctx.fillStyle = state.isNight ? "#444466" : "#999999";
+            state.particles.forEach(p => { ctx.fillRect(p.x, p.y, 4, 4); });
 
             ctx.fillStyle = state.isNight ? "#12122b" : "#535353";
             ctx.fillRect(0, GROUND_Y, 800, 40);
 
             drawDino(dino.x, dino.y);
+            
+            // Draw Obstacles
             obstacles.forEach(o => {
-                if (o.type === 'ptero') {
-                    ctx.fillStyle = "#4a3b37"; ctx.fillRect(o.x, o.y, 30, 10);
-                } else {
-                    ctx.fillStyle = "#76a969"; ctx.fillRect(o.x+10, o.y, 10, 40); ctx.fillRect(o.x, o.y+15, 30, 5);
-                }
+                ctx.fillStyle = o.type === 'ptero' ? "#c04040" : "#76a969";
+                ctx.fillRect(o.x, o.y, o.w, o.h);
             });
 
-            // UI
+            // Flight Alert
+            if (state.isFlying) {
+                ctx.fillStyle = "#ff8c00"; // Orange
+                ctx.font = "bold 24px Courier New";
+                ctx.textAlign = "center";
+                ctx.fillText("FLIGHT ENABLED!", 400, 50);
+                ctx.textAlign = "start";
+            }
+
+            // Speedometer
             ctx.fillStyle = "#e63946";
             ctx.font = "bold 14px Courier New";
             ctx.fillText("VELOCITY: " + (state.speed * 10).toFixed(0) + " KM/H", 20, 340);
-            if (state.isFlying) ctx.fillText("PILOT MODE ACTIVE", 20, 325);
-
+            
             ctx.fillStyle = state.isNight ? "#fff" : "#535353";
             ctx.font = "bold 20px Courier New";
             ctx.fillText(Math.floor(state.score).toString().padStart(5, '0'), 720, 40);
@@ -170,19 +169,17 @@
             if (e.code === 'Space' || e.code === 'ArrowUp') {
                 if (!state.isFlying) {
                     state.jumpCount++;
-                    if (state.jumpCount < 3) {
-                        dino.dy = -13;
-                    } else {
+                    if (state.jumpCount >= 3) {
                         state.isFlying = true;
                         dino.dy = 0;
+                    } else {
+                        dino.dy = -13;
                     }
                 }
             }
         });
 
-        window.addEventListener('keyup', e => { 
-            state.keys[e.code] = false;
-        });
+        window.addEventListener('keyup', e => { state.keys[e.code] = false; });
 
         loop();
     </script>
