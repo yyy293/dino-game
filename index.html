@@ -3,140 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dino Warp Fixed</title>
+    <title>Dino Warp Final</title>
     <style>
         body { margin: 0; background: #f7f7f7; overflow: hidden; font-family: 'Courier New', Courier, monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        canvas { background: transparent; border-bottom: 2px solid #535353; }
+        #container { position: relative; width: 800px; height: 350px; }
+        canvas { border-bottom: 2px solid #535353; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
-    <canvas id="gameCanvas"></canvas>
+    <div id="container">
+        <canvas id="gameCanvas"></canvas>
+    </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 800; canvas.height = 350;
 
-        // Assets
+        // Assets Mapping
         const audPath = 'audio/';
-        const snd1k = new Audio(audPath + 'aplausos_2.mp3');
-        const snd10k = new Audio(audPath + '-audiotrimmer_adesehy.mp3');
-        const sndGameOver = new Audio(audPath + 'directed-by-robert-b_voI2Z4T.mp3');
-        const sndWhoosh = new Audio(audPath + 'slowmo_whoosh.mp3');
+        const sounds = {
+            m1k: new Audio(audPath + 'aplausos_2.mp3'),
+            m10k: new Audio(audPath + '-audiotrimmer_adesehy.mp3'),
+            over: new Audio(audPath + 'directed-by-robert-b_voI2Z4T.mp3'),
+            whoosh: new Audio(audPath + 'slowmo_whoosh.mp3')
+        };
 
         const imgPath = 'images/';
         const dinoImg = new Image(); dinoImg.src = imgPath + 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
         const cactusImg = new Image(); cactusImg.src = imgPath + 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
 
-        // Game State
-        let score = 0;
-        let gameSpeed = 5;
-        let isGameOver = false;
-        let gameStarted = false;
-        let frameCount = 0;
-        let highScore = localStorage.getItem('dinoHighScore') || 0;
+        let imagesLoaded = 0;
+        [dinoImg, cactusImg].forEach(img => img.onload = () => imagesLoaded++);
 
-        // Cheats & FX
+        // Game Variables
+        let score = 0, gameSpeed = 5, isGameOver = false, gameStarted = false;
+        let frameCount = 0, highScore = localStorage.getItem('dinoHS') || 0;
         let canFly = false, isInvincible = false, isSlowMo = false;
         let spaceCount = 0, lastSpaceTime = 0, warpFlash = 0, lightningFlash = 0;
-        let ghosts = []; // For the ghost trail
 
-        const dino = { x: 50, y: 220, dy: 0, w: 45, h: 45, groundY: 220 };
+        let dino = { x: 50, y: 220, dy: 0, w: 44, h: 44, ground: 220 };
         let obstacles = [], clouds = [], rain = [], ripples = [];
 
-        // Init Environment
+        // Setup Scene
         for(let i=0; i<6; i++) clouds.push({ x: Math.random()*800, y: 30+Math.random()*80, s: 0.5+Math.random() });
-        for(let i=0; i<40; i++) rain.push({ x: Math.random()*800, y: Math.random()*350, l: 15 });
-
-        function resetGame() {
-            score = 0; gameSpeed = 5; isGameOver = false; obstacles = []; 
-            canFly = false; isInvincible = false; isSlowMo = false;
-            dino.y = dino.groundY; dino.dy = 0;
-        }
-
-        function spawnObstacle() {
-            if (frameCount % 70 === 0) {
-                let type = Math.random() > 0.3 ? 'cactus' : 'bird';
-                obstacles.push({
-                    x: 850,
-                    y: type === 'cactus' ? 220 : 150 - (Math.random()*100),
-                    w: type === 'cactus' ? 30 : 40,
-                    h: type === 'cactus' ? 45 : 20,
-                    type: type
-                });
-            }
-        }
+        for(let i=0; i<40; i++) rain.push({ x: Math.random()*800, y: Math.random()*350 });
 
         function update() {
-            if (!gameStarted || isGameOver) return;
+            if (isGameOver || !gameStarted) return;
             frameCount++;
 
-            let effectiveSpeed = isSlowMo ? gameSpeed * 0.2 : gameSpeed;
-            score += canFly ? 5 : 0.15;
+            let effectiveSpeed = isSlowMo ? gameSpeed * 0.15 : gameSpeed;
+            score += (canFly && !isSlowMo) ? 5 : 0.15;
 
-            // Audio Milestones
-            if (Math.floor(score) === 1000) snd1k.play();
-            if (Math.floor(score) === 10000) snd10k.play();
+            // Sound Milestones
+            if (Math.floor(score) === 1000) sounds.m1k.play();
+            if (Math.floor(score) === 10000) sounds.m10k.play();
 
-            // Physics
-            if (!canFly) {
-                dino.dy += 0.6;
-                dino.y += dino.dy;
-                if (dino.y > dino.groundY) { dino.y = dino.groundY; dino.dy = 0; }
-            }
-
-            // Background Cycles
-            let cycle = (Math.sin((score / 2000) * Math.PI - (Math.PI / 2)) + 1) / 2;
+            // Background Math
+            let cycle = (Math.sin((score/2000)*Math.PI - (Math.PI/2)) + 1) / 2;
             let isNight = cycle > 0.6;
             let isStorming = (canFly && isNight && !isSlowMo);
-            if (isStorming && Math.random() > 0.98) lightningFlash = 4;
+
+            if (isStorming && Math.random() > 0.98) lightningFlash = 5;
             if (lightningFlash > 0) lightningFlash--;
             if (warpFlash > 0) warpFlash--;
 
-            document.body.style.backgroundColor = lightningFlash > 0 ? '#fff' : (isSlowMo ? '#e6f0ff' : getSkyColor(cycle));
+            document.body.style.backgroundColor = lightningFlash > 0 ? '#fff' : (isSlowMo ? '#d0e5ff' : getSkyColor(cycle));
 
-            // Move Obstacles
+            // Movement
+            if (!canFly) {
+                dino.dy += 0.6; dino.y += dino.dy;
+                if (dino.y > dino.ground) { dino.y = dino.ground; dino.dy = 0; }
+            }
+
+            if (!isSlowMo) gameSpeed += canFly ? 0.2 : 0.0015;
+
+            // Obstacles logic
+            if (frameCount % Math.floor(700/gameSpeed) === 0) {
+                obstacles.push({ x: 800, y: Math.random() > 0.3 ? 220 : 120, w: 30, h: 45 });
+            }
+
             obstacles.forEach((obs, i) => {
                 obs.x -= effectiveSpeed;
-                if (obs.x < -50) obstacles.splice(i, 1);
-                
-                // Collision
-                if (!isInvincible && 
-                    dino.x < obs.x + obs.w && dino.x + dino.w > obs.x &&
-                    dino.y < obs.y + obs.h && dino.y + dino.h > obs.y) {
-                    isGameOver = true;
-                    sndGameOver.play();
+                if (!isInvincible && dino.x < obs.x+obs.w && dino.x+dino.w > obs.x && dino.y < obs.y+obs.h && dino.y+dino.h > obs.y) {
+                    isGameOver = true; sounds.over.play();
                 }
+                if (obs.x < -50) obstacles.splice(i, 1);
             });
 
-            // Warp Speed increase
-            if (!isSlowMo) gameSpeed += canFly ? 0.2 : 0.001;
-
-            spawnObstacle();
             draw(cycle, isNight, isStorming);
             requestAnimationFrame(update);
         }
 
         function getSkyColor(c) {
-            let r = 247 - (c * 227), g = 247 - (c * 227), b = 247 - (c * 207);
+            let r = 247 - (c*220), g = 247 - (c*220), b = 247 - (c*180);
             return `rgb(${r},${g},${b})`;
         }
 
         function draw(cycle, isNight, isStorming) {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // Sun/Moon
+            // Celestial Body
             const angle = (cycle * Math.PI) + Math.PI;
-            const size = canFly ? 40 : 25;
             ctx.fillStyle = isNight ? "#eee" : "#FFD700";
             ctx.beginPath();
-            ctx.arc(400 + Math.cos(angle)*300, 150 + Math.sin(angle)*100, size, 0, Math.PI*2);
+            ctx.arc(400 + Math.cos(angle)*300, 150 + Math.sin(angle)*100, canFly?40:25, 0, Math.PI*2);
             ctx.fill();
 
             // Clouds
             ctx.fillStyle = isNight ? "#666" : "#ddd";
             clouds.forEach(c => {
-                c.x -= c.s * (canFly ? 5 : 1);
+                c.x -= c.s * (canFly?10:1);
                 if (c.x < -100) c.x = 850;
                 ctx.beginPath(); ctx.arc(c.x, c.y, 20, 0, Math.PI*2); ctx.fill();
             });
@@ -145,21 +123,10 @@
             if (isStorming) {
                 ctx.strokeStyle = "rgba(180, 200, 255, 0.5)";
                 rain.forEach(r => {
-                    r.x -= 10; r.y += 15;
+                    r.y += 20; r.x -= 10;
                     if (r.y > 350) { r.y = -20; r.x = Math.random()*800; }
                     ctx.beginPath(); ctx.moveTo(r.x, r.y); ctx.lineTo(r.x-5, r.y+10); ctx.stroke();
                 });
-            }
-
-            // Dino Trail
-            if (canFly) {
-                ghosts.push({y: dino.y, a: 0.5});
-                if (ghosts.length > 5) ghosts.shift();
-                ghosts.forEach((g, i) => {
-                    ctx.globalAlpha = g.a * (i/5);
-                    ctx.drawImage(dinoImg, dino.x - (i*10), g.y, dino.w, dino.h);
-                });
-                ctx.globalAlpha = 1;
             }
 
             // Dino
@@ -167,33 +134,23 @@
             ctx.drawImage(dinoImg, dino.x, dino.y, dino.w, dino.h);
             
             // Obstacles
-            obstacles.forEach(obs => {
-                if (obs.type === 'cactus') ctx.drawImage(cactusImg, obs.x, obs.y, obs.w, obs.h);
-                else { ctx.fillStyle = "#535353"; ctx.fillRect(obs.x, obs.y, obs.w, obs.h); }
-            });
+            obstacles.forEach(obs => ctx.drawImage(cactusImg, obs.x, obs.y, obs.w, obs.h));
             ctx.filter = 'none';
 
             // UI
             ctx.fillStyle = isNight ? "#eee" : "#535353";
             ctx.font = "20px Courier New";
-            ctx.fillText(`HI ${Math.floor(highScore)} ${Math.floor(score)}`, 600, 30);
-            
-            if (warpFlash > 0) {
-                ctx.fillStyle = `rgba(255,255,255,${warpFlash/10})`;
-                ctx.fillRect(0,0,800,350);
-            }
-            
-            if (isGameOver) {
-                ctx.fillText("GAME OVER - PRESS R", 300, 180);
-            }
+            ctx.fillText(`HI ${Math.max(highScore, Math.floor(score)).toString().padStart(5, '0')} ${Math.floor(score).toString().padStart(5, '0')}`, 550, 40);
+
+            if (warpFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${warpFlash/10})`; ctx.fillRect(0,0,800,350); }
+            if (isGameOver) ctx.fillText("GAME OVER - PRESS R", 300, 180);
         }
 
         window.addEventListener('keydown', e => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (!gameStarted) { gameStarted = true; update(); }
-                if (dino.y >= dino.groundY && !canFly) dino.dy = -12;
-                
-                // Secret Warp Trigger
+                if (!gameStarted && imagesLoaded >= 2) { gameStarted = true; update(); }
+                if (dino.y >= dino.ground && !canFly) dino.dy = -12;
+
                 let now = Date.now();
                 if (now - lastSpaceTime < 300) spaceCount++; else spaceCount = 1;
                 lastSpaceTime = now;
@@ -204,9 +161,8 @@
             if (e.code === 'KeyR') {
                 if (isGameOver) location.reload();
                 else if (canFly) {
-                    sndWhoosh.play();
+                    sounds.whoosh.play();
                     canFly = false; isInvincible = false; isSlowMo = true;
-                    gameSpeed = 7;
                     setTimeout(() => isSlowMo = false, 2000);
                 }
             }
@@ -216,10 +172,16 @@
             }
         });
 
-        // Final check to start loop if space is pressed
-        ctx.fillStyle = "#535353";
-        ctx.font = "20px Courier New";
-        ctx.fillText("PRESS SPACE TO START", 280, 180);
+        // Start Text
+        ctx.fillStyle = "#535353"; ctx.font = "20px Courier New";
+        ctx.fillText("WAITING FOR IMAGES...", 280, 180);
+        const checkLoad = setInterval(() => {
+            if (imagesLoaded >= 2) {
+                ctx.clearRect(0,0,800,350);
+                ctx.fillText("READY! PRESS SPACE", 300, 180);
+                clearInterval(checkLoad);
+            }
+        }, 100);
     </script>
 </body>
 </html>
