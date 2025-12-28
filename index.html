@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dino Warp: Shatter Edition</title>
+    <title>Dino Warp: Meteor Impact</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; }
@@ -26,6 +26,10 @@
             over: new Audio('audio/directed-by-robert-b_voI2Z4T.mp3'),
             whoosh: new Audio('audio/slowmo_whoosh.mp3')
         };
+        
+        function unlockAudio() {
+            Object.values(snd).forEach(s => { s.play().then(() => { s.pause(); s.currentTime = 0; }).catch(()=>{}); });
+        }
         const playSnd = (a) => { if(a) a.play().catch(() => {}); };
 
         function drawDino(x, y, color) {
@@ -36,25 +40,23 @@
         }
 
         function drawCactus(x, y, color, isGhost) {
-            ctx.save();
-            if (isGhost) {
-                ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(Date.now()/150)*0.4})`;
-                ctx.shadowBlur = 15; ctx.shadowColor = "#fff";
-            } else { ctx.fillStyle = color; }
+            if (isGhost) ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + Math.sin(Date.now()/150)*0.4})`;
+            else ctx.fillStyle = color;
             ctx.fillRect(x+10, y, 10, 40); ctx.fillRect(x, y+10, 10, 15); ctx.fillRect(x+20, y+15, 10, 12);
-            ctx.restore();
         }
 
         let state = {
             score: 0, speed: 5, started: false, over: false, frame: 0,
             highScore: localStorage.getItem('dinoHS') || 0,
             canFly: false, isInvincible: false, isSlowMo: false,
-            warpFlash: 0, spaceCount: 0, lastSpace: 0,
+            spaceCount: 0, lastSpace: 0, shakeTime: 0,
             milestones: { m1: false, m10: false }
         };
 
         const dino = { x: 50, y: 220, dy: 0, w: 40, h: 40, ground: 220 };
-        let obstacles = [], flares = [], meteors = [], fireTrail = [], shockwaves = [], debris = [];
+        let obstacles = [], meteors = [], fireTrail = [], debris = [], stars = [];
+
+        for(let i=0; i<80; i++) stars.push({x: Math.random()*800, y: Math.random()*200, r: Math.random()*1.5, o: Math.random()});
 
         function update() {
             if (state.over || !state.started) return;
@@ -69,35 +71,38 @@
             let isNight = cycle > 0.6;
             let isBloodMoon = isNight && state.score >= 5000;
 
-            document.getElementById('container').style.backgroundColor = state.isSlowMo ? '#d0e5ff' : (isNight ? '#0d0d0d' : '#f7f7f7');
+            document.getElementById('container').style.backgroundColor = isNight ? '#0a0a1a' : '#f7f7f7';
 
             if (!state.canFly) {
                 dino.dy += 0.6; dino.y += dino.dy;
                 if (dino.y > dino.ground) { dino.y = dino.ground; dino.dy = 0; }
             } else {
                 fireTrail.push({x: dino.x, y: dino.y + 15 + (Math.random()*10), life: 1});
-                if (state.frame % 15 === 0) shockwaves.push({x: dino.x + 20, y: dino.y + 20, r: 10, a: 1});
             }
 
-            if (!state.isSlowMo) state.speed += state.canFly ? 0.3 : 0.002;
-            if (state.frame % Math.max(15, Math.floor(600/state.speed)) === 0) {
+            if (!state.isSlowMo) state.speed += state.canFly ? 0.25 : 0.002;
+            
+            if (state.frame % Math.max(20, Math.floor(600/state.speed)) === 0) {
                 obstacles.push({ x: 800, y: 220, w: 30, h: 40 });
             }
 
-            if (isBloodMoon && Math.random() > 0.97) meteors.push({ x: Math.random()*1200, y: -20, s: 12 });
+            // Meteor Logic + Shake Trigger
+            if (isBloodMoon && Math.random() > 0.96) {
+                meteors.push({ x: Math.random()*1000, y: -20, s: 12 + Math.random()*8 });
+            }
+            meteors = meteors.filter(m => {
+                m.x -= m.s; m.y += m.s;
+                if (m.y > 350) { state.shakeTime = 10; return false; }
+                return true;
+            });
 
             obstacles = obstacles.filter(obs => {
                 obs.x -= effSpeed;
                 let collided = dino.x < obs.x+obs.w && dino.x+dino.w > obs.x && dino.y < obs.y+obs.h && dino.y+dino.h > obs.y;
-                
                 if (collided) {
                     if (state.canFly) {
-                        // Shatter Logic
-                        for(let i=0; i<8; i++) {
-                            debris.push({x: obs.x+15, y: obs.y+20, vx: Math.random()*10 - 2, vy: Math.random()*-10, life: 1});
-                        }
-                        shockwaves.push({x: obs.x, y: obs.y, r: 5, a: 1});
-                        return false; // Remove cactus
+                        for(let i=0; i<5; i++) debris.push({x: obs.x+15, y: obs.y+20, vx: Math.random()*10-5, vy: Math.random()*-8, life: 1});
+                        return false; 
                     } else if (!state.isInvincible) {
                         state.over = true; playSnd(snd.over);
                     }
@@ -110,86 +115,103 @@
         }
 
         function draw(cycle, isNight, isBloodMoon) {
+            ctx.save();
+            // Screen Shake Logic
+            if (state.shakeTime > 0) {
+                let dx = Math.random() * 8 - 4;
+                let dy = Math.random() * 8 - 4;
+                ctx.translate(dx, dy);
+                state.shakeTime--;
+            }
+
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if(isNight) {
+                stars.forEach(s => {
+                    ctx.fillStyle = `rgba(255, 255, 255, ${s.o * (Math.sin(state.frame*0.05 + s.x)*0.5 + 0.5)})`;
+                    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.fill();
+                    s.x -= (state.speed * 0.1); if(s.x < 0) s.x = 800;
+                });
+            }
+
             const angle = (cycle * Math.PI) + Math.PI;
             const cx = 400 + Math.cos(angle)*350, cy = 150 + Math.sin(angle)*120;
-            let celSize = (state.canFly ? 50 : 30) + (state.score / 250);
-
-            shockwaves.forEach((s, i) => {
-                ctx.strokeStyle = `rgba(255, 255, 255, ${s.a})`;
-                ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI*2); ctx.stroke();
-                s.r += 12; s.a -= 0.05; if (s.a <= 0) shockwaves.splice(i, 1);
-            });
+            let celSize = (state.canFly ? 50 : 30) + (state.score / 400);
 
             fireTrail.forEach((p, i) => {
-                ctx.fillStyle = `rgba(255, ${Math.random()*100}, 0, ${p.life})`;
-                ctx.fillRect(p.x, p.y, 6, 6);
-                p.x -= state.speed; p.life -= 0.05; if (p.life <= 0) fireTrail.splice(i, 1);
+                ctx.fillStyle = `rgba(255, ${60 + Math.random()*100}, 0, ${p.life})`; ctx.fillRect(p.x, p.y, 5, 5);
+                p.x -= 8; p.life -= 0.04; if (p.life <= 0) fireTrail.splice(i, 1);
             });
 
             debris.forEach((d, i) => {
-                ctx.fillStyle = isNight ? `rgba(255,255,255,${d.life})` : `rgba(83,83,83,${d.life})`;
-                ctx.fillRect(d.x, d.y, 5, 5);
-                d.x += d.vx; d.y += d.vy; d.vy += 0.5; d.life -= 0.02;
-                if (d.life <= 0) debris.splice(i, 1);
+                ctx.fillStyle = isNight ? "#fff" : "#535353"; ctx.fillRect(d.x, d.y, 4, 4);
+                d.x += d.vx; d.y += d.vy; d.vy += 0.4; d.life -= 0.03; if (d.life <= 0) debris.splice(i, 1);
             });
 
-            meteors.forEach((m, i) => {
-                ctx.strokeStyle = "#ff4500"; ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x-40, m.y+40); ctx.stroke();
-                m.x -= m.s; m.y += m.s; if (m.y > 400) meteors.splice(i, 1);
+            // Meteors
+            ctx.strokeStyle = "#ff4500";
+            ctx.lineWidth = 3;
+            meteors.forEach(m => {
+                ctx.beginPath(); ctx.moveTo(m.x, m.y); ctx.lineTo(m.x+20, m.y-20); ctx.stroke();
             });
 
-            ctx.save();
-            if (isNight) {
-                ctx.fillStyle = isBloodMoon ? "#8b0000" : "#eee";
-                ctx.shadowBlur = 20; ctx.shadowColor = isBloodMoon ? "#f00" : "#fff";
-                ctx.beginPath(); ctx.arc(cx, cy, celSize, 0, Math.PI*2); ctx.fill();
-            } else {
-                if (state.canFly) {
-                    if (state.frame % 2 === 0) flares.push({x: cx, y: cy, vx: (Math.random()-0.5)*15, vy: (Math.random()-0.5)*15, life: 1});
-                    flares.forEach((f, i) => {
-                        ctx.fillStyle = `rgba(255, 60, 0, ${f.life})`; ctx.fillRect(f.x, f.y, 4, 4);
-                        f.x += f.vx; f.y += f.vy; f.life -= 0.02; if (f.life <= 0) flares.splice(i, 1);
-                    });
-                    ctx.shadowBlur = 35; ctx.shadowColor = "#f00"; ctx.fillStyle = "#ff2222";
-                } else { ctx.fillStyle = "#FFD700"; }
-                ctx.beginPath(); ctx.arc(cx, cy, celSize, 0, Math.PI*2); ctx.fill();
-            }
-            ctx.restore();
+            ctx.fillStyle = isNight ? (isBloodMoon ? "#8b0000" : "#eee") : "#FFD700";
+            ctx.beginPath(); ctx.arc(cx, cy, celSize, 0, Math.PI*2); ctx.fill();
 
             let color = isNight ? "#fff" : "#535353";
             drawDino(dino.x, dino.y, color);
             obstacles.forEach(obs => drawCactus(obs.x, obs.y, color, isBloodMoon));
 
+            // Speedometer
+            let speedKmh = Math.floor(state.speed * 10);
+            let machNum = (state.speed / 45);
+            let isCracked = state.speed > 90; 
+            
+            ctx.save();
+            ctx.fillStyle = state.speed > 40 ? "#ff0000" : color;
+            ctx.font = "bold 16px Courier New";
+            ctx.fillText(`SPEED: ${speedKmh} km/h`, 20, 330);
+            if(state.speed > 40) ctx.fillText(`MACH ${machNum.toFixed(1)}`, 20, 310);
+            if (isCracked) {
+                ctx.strokeStyle = "rgba(255,0,0,0.6)"; ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.moveTo(15, 300); ctx.lineTo(150, 340); ctx.moveTo(100, 300); ctx.lineTo(30, 340); ctx.stroke();
+            }
+            ctx.restore();
+
             ctx.fillStyle = color;
             ctx.font = "bold 20px Courier New"; ctx.textAlign = "right";
-            ctx.fillText(`HI ${Math.max(state.highScore, Math.floor(state.score)).toString().padStart(5, '0')} ${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
+            ctx.fillText(`${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
 
-            if (state.warpFlash > 0) { ctx.fillStyle = `rgba(255,255,255,${state.warpFlash/10})`; ctx.fillRect(0,0,800,350); state.warpFlash--; }
             if (state.over) {
                 ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,800,350);
                 ctx.fillStyle = "white"; ctx.textAlign = "center"; ctx.fillText("GAME OVER - PRESS R", 400, 180);
             }
+            ctx.restore();
         }
 
         window.addEventListener('keydown', e => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (!state.started) { state.started = true; update(); return; }
+                if (!state.started) { unlockAudio(); state.started = true; update(); return; }
                 if (dino.y >= dino.ground && !state.canFly) dino.dy = -12;
                 let now = Date.now();
                 if (now - state.lastSpace < 300) state.spaceCount++; else state.spaceCount = 1;
                 state.lastSpace = now;
-                if (state.spaceCount >= 3 && !state.canFly) { state.canFly = true; state.isInvincible = true; state.speed = 55; state.warpFlash = 10; }
+                if (state.spaceCount >= 3 && !state.canFly) { state.canFly = true; state.isInvincible = true; state.speed = 45; }
             }
             if (e.code === 'KeyR') {
                 if (state.over) location.reload();
-                else if (state.canFly) { playSnd(snd.whoosh); state.canFly = false; state.isInvincible = false; state.isSlowMo = true; state.speed = 8; setTimeout(() => state.isSlowMo = false, 2000); }
+                else if (state.canFly) { playSnd(snd.whoosh); state.canFly = false; state.isInvincible = false; state.speed = 12; }
             }
-            if (state.canFly) { if (e.code === 'ArrowUp') dino.y -= 40; if (e.code === 'ArrowDown') dino.y += 40; }
+            if (state.canFly) { 
+                if (e.code === 'ArrowUp') dino.y -= 40; 
+                if (e.code === 'ArrowDown') dino.y += 40; 
+                if (dino.y < 20) dino.y = 20; if (dino.y > 300) dino.y = 300;
+            }
         });
 
         ctx.fillStyle = "#535353"; ctx.font = "bold 20px Courier New"; ctx.textAlign = "center";
         ctx.fillText("PRESS SPACE TO PLAY", 400, 180);
+        drawDino(dino.x, 220, "#535353");
     </script>
 </body>
 </html>
