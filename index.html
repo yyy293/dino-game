@@ -11,7 +11,6 @@
             min-height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; 
             overflow: hidden; touch-action: none; transition: background-color 0.5s;
         }
-        /* Night Mode Style */
         body.night { background-color: #202124; }
         #container { 
             position: relative; width: 800px; height: 200px; 
@@ -32,6 +31,11 @@
         canvas.width = 800;
         canvas.height = 200;
 
+        // Audio Objects
+        const snd1k = new Audio('aplausos_2.mp3');
+        const snd10k = new Audio('-audiotrimmer_adesehy.mp3');
+        const sndGameOver = new Audio('directed-by-robert-b_voI2Z4T.mp3');
+
         // Constants
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
@@ -42,7 +46,6 @@
         // Game state
         let gameSpeed = INITIAL_SPEED;
         let score = 0;
-        let highScore = parseInt(localStorage.getItem('dinoHighScore')) || 0;
         let isGameOver = false;
         let gameStarted = false;
         let obstacles = [];
@@ -51,6 +54,10 @@
         let isNight = false;
         let showNoice = false;
         let noiceTimer = 0;
+        
+        // Sound flags to prevent looping
+        let hasPlayed1k = false;
+        let hasPlayed10k = false;
 
         // Cheats
         let canFly = false;
@@ -58,9 +65,9 @@
         let spaceCount = 0;
         let lastSpaceTime = 0;
 
-        // Sound logic
+        // Basic beep sound for jumping
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        function playSound(freq, type = 'square', duration = 0.1) {
+        function playBeep(freq, type = 'square', duration = 0.1) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const g = audioCtx.createGain();
@@ -78,7 +85,7 @@
             draw() {
                 const color = isNight ? "#DDD" : "#535353";
                 ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : color);
-                ctx.fillRect(this.x, this.y, 40, 40); // Standard dino box
+                ctx.fillRect(this.x, this.y, 40, 40);
             },
             update() {
                 if (!canFly) {
@@ -105,47 +112,57 @@
         }
 
         function resetGame() {
-            // THE "R" KEY LOGIC: Disable all cheats and reset world
+            // STOP CHEATS ON R
             canFly = false;
             isInvincible = false;
+            
+            // Reset state
             score = 0;
             gameSpeed = INITIAL_SPEED;
             isGameOver = false;
             obstacles = [];
             isNight = false;
             showNoice = false;
+            hasPlayed1k = false;
+            hasPlayed10k = false;
+            
             document.body.classList.remove('night');
+            cancelAnimationFrame(animationFrameId);
             animate();
         }
 
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // 1. NIGHT MODE LOGIC (Every 700 points)
             isNight = Math.floor(score / 700) % 2 === 1;
             document.body.classList.toggle('night', isNight);
 
             if (isGameOver) {
                 ctx.fillStyle = isNight ? "#DDD" : "#535353";
                 ctx.textAlign = "center";
+                ctx.font = "20px Courier New";
                 ctx.fillText("GAME OVER - PRESS R TO RESTART", canvas.width / 2, 100);
                 return;
             }
 
-            // 2. SCORE & MEME LOGIC (10,000 points)
             score += 0.15;
-            if (Math.floor(score) > 0 && Math.floor(score) % 10000 === 0 && noiceTimer <= 0) {
+            let currentScore = Math.floor(score);
+
+            // Score Sound Logic
+            if (currentScore >= 1000 && !hasPlayed1k) {
+                snd1k.play();
+                hasPlayed1k = true;
+            }
+            if (currentScore >= 10000 && !hasPlayed10k) {
+                snd10k.play();
+                hasPlayed10k = true;
                 showNoice = true;
-                noiceTimer = 120; // Show for 2 seconds approx
-                playSound(600, 'sine', 0.5); // Meme sound trigger
+                noiceTimer = 120;
             }
 
-            // 3. DIFFICULTY SCALING (Double cacti logic)
             gameSpeed += SPEED_INCREMENT;
             if (frameCount % Math.max(30, Math.floor(60 - gameSpeed)) === 0) {
                 if (Math.random() < 0.02) {
                     obstacles.push(new Obstacle());
-                    // Farther you get, higher chance of a double cactus
                     if (score > 1000 && Math.random() < (score / 15000)) {
                         obstacles.push(new Obstacle(40)); 
                     }
@@ -156,12 +173,12 @@
 
             obstacles = obstacles.filter(obs => {
                 obs.update();
-                // Collision
                 if (!isInvincible && 
                     dino.x < obs.x + obs.width && dino.x + 35 > obs.x && 
                     dino.y < obs.y + obs.height && dino.y + 35 > obs.y) {
+                    
                     isGameOver = true;
-                    playSound(150, 'sawtooth', 0.3);
+                    sndGameOver.play(); // Player loses sound
                 }
                 return obs.x > -50;
             });
@@ -169,14 +186,14 @@
             // UI
             ctx.fillStyle = isNight ? "#DDD" : "#535353";
             ctx.textAlign = "right";
-            ctx.fillText(Math.floor(score).toString().padStart(5, '0'), canvas.width - 20, 30);
+            ctx.font = "20px Courier New";
+            ctx.fillText(currentScore.toString().padStart(5, '0'), canvas.width - 20, 30);
 
             if (showNoice && noiceTimer > 0) {
                 ctx.textAlign = "center";
                 ctx.font = "30px Courier New";
                 ctx.fillText("NOICE", canvas.width / 2, 60);
                 noiceTimer--;
-                if (noiceTimer <= 0) showNoice = false;
             }
 
             frameCount++;
@@ -186,7 +203,11 @@
         window.addEventListener('keydown', e => {
             if (e.code === 'Space') {
                 if (!gameStarted) { gameStarted = true; animate(); }
-                if (!dino.isJumping) { dino.dy = JUMP_FORCE; dino.isJumping = true; playSound(400); }
+                if (!dino.isJumping) { 
+                    dino.dy = JUMP_FORCE; 
+                    dino.isJumping = true; 
+                    playBeep(400); 
+                }
                 
                 // Cheat Trigger: Triple Space
                 let now = Date.now();
@@ -194,7 +215,9 @@
                 lastSpaceTime = now;
                 if (spaceCount >= 3) { canFly = true; isInvincible = true; }
             }
+
             if (e.code === 'KeyR') resetGame();
+
             if (canFly) {
                 if (e.code === 'ArrowUp') dino.y -= 20;
                 if (e.code === 'ArrowDown') dino.y += 20;
@@ -204,6 +227,7 @@
         // Initial message
         ctx.fillStyle = "#535353";
         ctx.textAlign = "center";
+        ctx.font = "20px Courier New";
         ctx.fillText("PRESS SPACE TO START", canvas.width / 2, 100);
     </script>
 </body>
