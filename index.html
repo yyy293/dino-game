@@ -58,7 +58,8 @@
     </div>
     <div id="info">
         <p><span class="key">SPACE</span> or <span class="key">CLICK</span> to jump | <span class="key">SPACE×3</span> or <span class="key">CLICK×3</span> for flight mode</p>
-        <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> to toggle gravity | <span class="key">R</span> after game over to restart</p>
+        <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> to fall (anti-cheat) | <span class="key">R</span> after game over to restart</p>
+        <p style="color: #e74c3c; font-weight: bold;">⚠️ Cactuses can still hit you while flying!</p>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -95,7 +96,7 @@
         let lastTapTime = 0;
         let showCheatMessage = false;
         let cheatMessageTimer = 0;
-        let gravityEnabled = true;
+        let flightSpeed = 8; // Smooth flight movement speed
 
         // Load images
         let dinoLoaded = false;
@@ -230,6 +231,7 @@
             dy: 0,
             isJumping: false,
             legFrame: 0,
+            targetY: GROUND_Y, // For smooth flight movement
             
             draw() {
                 // Try to draw image first, fall back to drawn dino
@@ -251,17 +253,18 @@
             update() {
                 // Handle gravity and jumping
                 if (!canFly) {
-                    if (gravityEnabled) {
-                        this.dy += GRAVITY;
-                        this.y += this.dy;
+                    this.dy += GRAVITY;
+                    this.y += this.dy;
 
-                        if (this.y >= GROUND_Y) {
-                            this.y = GROUND_Y;
-                            this.dy = 0;
-                            this.isJumping = false;
-                        }
+                    if (this.y >= GROUND_Y) {
+                        this.y = GROUND_Y;
+                        this.dy = 0;
+                        this.isJumping = false;
                     }
                 } else {
+                    // Smooth flight movement
+                    const diff = this.targetY - this.y;
+                    this.y += diff * 0.2; // Smooth interpolation
                     this.dy = 0;
                 }
 
@@ -367,8 +370,7 @@
         }
 
         function checkCollisions() {
-            if (canFly) return;
-
+            // Cactuses can make you lose even while flying!
             for (let obstacle of obstacles) {
                 if (obstacle.collidesWith(dino)) {
                     gameOver();
@@ -398,6 +400,7 @@
             dino.y = GROUND_Y;
             dino.dy = 0;
             dino.isJumping = false;
+            dino.targetY = GROUND_Y;
             nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
             
             // Reset custom additions
@@ -406,7 +409,7 @@
             tapCount = 0;
             showCheatMessage = false;
             cheatMessageTimer = 0;
-            gravityEnabled = true;
+            flightSpeed = 8;
             
             cancelAnimationFrame(animationFrameId);
             animate();
@@ -512,19 +515,67 @@
                 }
             }
 
-            // Arrow controls during flight
+            // Arrow controls during flight - smooth and faster
             if (e.code === 'ArrowUp' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
-                dino.y = Math.max(20, dino.y - 5);
+                dino.targetY = Math.max(20, dino.targetY - flightSpeed);
             }
 
             if (e.code === 'ArrowDown' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
-                dino.y = Math.min(GROUND_Y, dino.y + 5);
+                dino.targetY = Math.min(GROUND_Y, dino.targetY + flightSpeed);
             }
 
-            // R key for gravity toggle or restart
+            // R key - Anti-cheat: makes you fall when flying, restart when game over
             if (e.code === 'KeyR') {
                 if (canFly && !isGameOver) {
-                    gravityEnabled = !gravityEnabled;
-                    console.log('🌍
+                    // Anti-cheat: disable flight and fall
+                    canFly = false;
+                    showCheatMessage = false;
+                    dino.dy = 0; // Start falling from current position
+                    console.log('⚠️ Flight disabled! Falling...');
+                } else if (isGameOver) {
+                    resetGame();
+                }
+            }
+        });
+
+        canvas.addEventListener('click', () => {
+            if (!gameStarted) {
+                gameStarted = true;
+                return;
+            }
+
+            if (isGameOver) return;
+
+            // Triple click for flight mode
+            const now = Date.now();
+            if (now - lastTapTime < 1000) {
+                tapCount++;
+            } else {
+                tapCount = 1;
+            }
+            lastTapTime = now;
+
+            if (tapCount >= 3 && !canFly) {
+                canFly = true;
+                showCheatMessage = true;
+                cheatMessageTimer = 0;
+                tapCount = 0;
+                console.log('✈️ Flight mode activated!');
+            } else {
+                dino.jump();
+            }
+        });
+
+        // Prevent scrolling
+        canvas.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+        });
+
+        // Start the game
+        console.log('🦖 Dino Game loaded! High score:', highScore);
+        animate();
+    </script>
+</body>
+</html>
