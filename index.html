@@ -33,30 +33,12 @@
             width: 100%;
             height: 100%;
         }
-        #info {
-            margin-top: 20px;
-            text-align: center;
-            color: #535353;
-            font-size: 14px;
-        }
-        #info p {
-            margin: 5px 0;
-        }
-        .key {
-            display: inline-block;
-            padding: 2px 6px;
-            background: #535353;
-            color: white;
-            border-radius: 3px;
-            font-weight: bold;
-        }
     </style>
 </head>
 <body>
     <div id="container">
         <canvas id="gameCanvas"></canvas>
     </div>
-
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
@@ -64,8 +46,14 @@
         canvas.height = 200;
 
         // Game constants
-_DISTANCE = 400;
-        const OBSTACLE_MAX_DISTANCE = 800;
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -11;
+        const GROUND_Y = 150;
+        const INITIAL_SPEED = 10;
+        const SPEED_INCREMENT = 0.005;
+        const MAX_SPEED = 25;
+        const OBSTACLE_MIN_DISTANCE = 350;
+        const OBSTACLE_MAX_DISTANCE = 700;
 
         // Game state
         let gameSpeed = INITIAL_SPEED;
@@ -87,7 +75,7 @@ _DISTANCE = 400;
         let lastTapTime = 0;
         let showCheatMessage = false;
         let cheatMessageTimer = 0;
-        let flightSpeed = 4; // Smoother flight movement
+        let flightSpeed = 4;
         let lastMilestoneScore = 0;
 
         // Arrow key state for smoother continuous movement
@@ -140,7 +128,6 @@ _DISTANCE = 400;
                 osc.start();
                 osc.stop(now + 0.1);
             } else if (type === 'death') {
-                // Faster ominous "dun dun dunnn"
                 const notes = [{f:100,s:0,d:0.5},{f:95,s:0.55,d:0.5},{f:80,s:1.1,d:1.5}];
                 notes.forEach(n => {
                     const filter = audioCtx.createBiquadFilter();
@@ -165,7 +152,6 @@ _DISTANCE = 400;
                     });
                 });
             } else if (type === 'ding') {
-                // Simple ding for 100-point milestones
                 const osc = audioCtx.createOscillator();
                 const g = audioCtx.createGain();
                 osc.type = 'sine';
@@ -178,35 +164,74 @@ _DISTANCE = 400;
                 osc.start();
                 osc.stop(now + 0.2);
             } else if (type === 'applause') {
-                // Crowd applause for 1000-point milestones
-                const duration = 1.5;
-                for (let i = 0; i < 60; i++) {
-                    const delay = Math.random() * duration;
-                    const noise = audioCtx.createBufferSource();
-                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
-                    const data = buffer.getChannelData(0);
-                    for (let j = 0; j < data.length; j++) {
-                        data[j] = Math.random() * 2 - 1;
+                // Realistic crowd applause with multiple clap patterns
+                const duration = 2.5;
+                const numPeople = 80;
+                
+                for (let person = 0; person < numPeople; person++) {
+                    const startDelay = Math.random() * 0.3;
+                    const clapRate = 0.15 + Math.random() * 0.1; // Time between claps
+                    const numClaps = 12 + Math.floor(Math.random() * 8);
+                    
+                    for (let clap = 0; clap < numClaps; clap++) {
+                        const clapTime = startDelay + (clap * clapRate);
+                        if (clapTime > duration) break;
+                        
+                        // Create individual clap sound
+                        const noise = audioCtx.createBufferSource();
+                        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.03, audioCtx.sampleRate);
+                        const data = buffer.getChannelData(0);
+                        
+                        // Sharp attack for clap sound
+                        for (let j = 0; j < data.length; j++) {
+                            const envelope = Math.exp(-j / (audioCtx.sampleRate * 0.01));
+                            data[j] = (Math.random() * 2 - 1) * envelope;
+                        }
+                        noise.buffer = buffer;
+                        
+                        // Filter to make it sound like hands clapping
+                        const filter = audioCtx.createBiquadFilter();
+                        filter.type = "bandpass";
+                        filter.frequency.value = 800 + Math.random() * 1500;
+                        filter.Q.value = 2;
+                        
+                        const g = audioCtx.createGain();
+                        const volume = 0.015 + Math.random() * 0.015;
+                        g.gain.setValueAtTime(volume, now + clapTime);
+                        g.gain.exponentialRampToValueAtTime(0.001, now + clapTime + 0.03);
+                        
+                        // Panning for spatial effect
+                        const panner = audioCtx.createStereoPanner();
+                        panner.pan.value = (Math.random() * 2 - 1) * 0.8;
+                        
+                        noise.connect(filter);
+                        filter.connect(panner);
+                        panner.connect(g);
+                        g.connect(audioCtx.destination);
+                        noise.start(now + clapTime);
                     }
-                    noise.buffer = buffer;
-                    
-                    const filter = audioCtx.createBiquadFilter();
-                    filter.type = "bandpass";
-                    filter.frequency.value = 1000 + Math.random() * 2000;
-                    filter.Q.value = 0.5;
-                    
+                }
+                
+                // Add some whoops and cheers
+                for (let i = 0; i < 5; i++) {
+                    const delay = 0.2 + Math.random() * 1.5;
+                    const osc = audioCtx.createOscillator();
                     const g = audioCtx.createGain();
-                    g.gain.setValueAtTime(0, now + delay);
-                    g.gain.linearRampToValueAtTime(0.03 + Math.random() * 0.02, now + delay + 0.01);
-                    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.05);
                     
-                    noise.connect(filter);
-                    filter.connect(g);
+                    osc.type = 'sine';
+                    osc.frequency.setValueAtTime(300 + Math.random() * 400, now + delay);
+                    osc.frequency.exponentialRampToValueAtTime(500 + Math.random() * 300, now + delay + 0.2);
+                    
+                    g.gain.setValueAtTime(0, now + delay);
+                    g.gain.linearRampToValueAtTime(0.03, now + delay + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.2);
+                    
+                    osc.connect(g);
                     g.connect(audioCtx.destination);
-                    noise.start(now + delay);
+                    osc.start(now + delay);
+                    osc.stop(now + delay + 0.2);
                 }
             } else if (type === 'noice') {
-                // "Noice" meme sound for 10000 milestone
                 const notes = [
                     {freq: 400, start: 0, duration: 0.15},
                     {freq: 500, start: 0.15, duration: 0.25}
@@ -240,22 +265,16 @@ _DISTANCE = 400;
         function drawDino(x, y, width, height, legFrame) {
             ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
             
-            // Body
             ctx.fillRect(x + 20, y, 22, 22);
-            // Neck
             ctx.fillRect(x + 35, y + 10, 7, 12);
-            // Head
             ctx.fillRect(x + 35, y + 2, 15, 10);
-            // Eye
             ctx.fillStyle = "#fff";
             ctx.fillRect(x + 45, y + 4, 3, 3);
             
             ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
-            // Tail
             ctx.fillRect(x + 10, y + 18, 12, 4);
             ctx.fillRect(x, y + 16, 12, 4);
             
-            // Legs (animated)
             if (legFrame === 0) {
                 ctx.fillRect(x + 20, y + 22, 6, 10);
                 ctx.fillRect(x + 30, y + 22, 6, 10);
@@ -267,12 +286,9 @@ _DISTANCE = 400;
 
         function drawCactus(x, y, width, height) {
             ctx.fillStyle = "#535353";
-            // Main body
             ctx.fillRect(x + 10, y, 10, height);
-            // Left arm
             ctx.fillRect(x, y + 10, 10, 15);
             ctx.fillRect(x, y + 10, 4, 20);
-            // Right arm
             ctx.fillRect(x + 20, y + 15, 10, 15);
             ctx.fillRect(x + 26, y + 15, 4, 20);
         }
@@ -289,13 +305,11 @@ _DISTANCE = 400;
             targetY: GROUND_Y,
             
             draw() {
-                // Flashing effect for invincibility
                 if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
                     ctx.save();
                     ctx.globalAlpha = 0.6;
                 }
 
-                // Try to draw image first, fall back to drawn dino
                 if (dinoLoaded) {
                     ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
                 } else {
@@ -306,7 +320,6 @@ _DISTANCE = 400;
                     ctx.restore();
                 }
 
-                // Flight or invincibility label
                 if (canFly || isInvincible) {
                     ctx.fillStyle = isInvincible ? "#f39c12" : "orange";
                     ctx.font = "bold 14px Courier";
@@ -320,7 +333,6 @@ _DISTANCE = 400;
             },
 
             update() {
-                // Handle smooth arrow key movement in flight mode
                 if (canFly) {
                     if (keysPressed.up) {
                         this.targetY = Math.max(20, this.targetY - flightSpeed);
@@ -329,12 +341,10 @@ _DISTANCE = 400;
                         this.targetY = Math.min(GROUND_Y, this.targetY + flightSpeed);
                     }
                     
-                    // Smooth interpolation
                     const diff = this.targetY - this.y;
                     this.y += diff * 0.3;
                     this.dy = 0;
                 } else {
-                    // Normal gravity
                     this.dy += GRAVITY;
                     this.y += this.dy;
 
@@ -345,7 +355,6 @@ _DISTANCE = 400;
                     }
                 }
 
-                // Animate legs when running on ground
                 if (this.y >= GROUND_Y && gameStarted && !isGameOver) {
                     if (frameCount % 6 === 0) {
                         this.legFrame = 1 - this.legFrame;
@@ -376,7 +385,6 @@ _DISTANCE = 400;
             update() {
                 this.x -= gameSpeed;
 
-                // Draw obstacle - try image first
                 if (cactusLoaded) {
                     ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
                 } else {
@@ -431,7 +439,6 @@ _DISTANCE = 400;
 
         // Game logic functions
         function spawnObstacle() {
-            // Dynamic difficulty: obstacles spawn closer together as score increases
             const difficultyMultiplier = Math.max(0.5, 1 - (score / 5000));
             const adjustedMinDistance = OBSTACLE_MIN_DISTANCE * difficultyMultiplier;
             const adjustedMaxDistance = OBSTACLE_MAX_DISTANCE * difficultyMultiplier;
@@ -452,7 +459,6 @@ _DISTANCE = 400;
         }
 
         function checkCollisions() {
-            // Invincibility prevents collisions
             if (isInvincible) return;
 
             for (let obstacle of obstacles) {
@@ -487,7 +493,6 @@ _DISTANCE = 400;
             dino.targetY = GROUND_Y;
             nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
             
-            // Reset custom additions
             canFly = false;
             isInvincible = false;
             spaceCount = 0;
@@ -522,7 +527,6 @@ _DISTANCE = 400;
                 return;
             }
 
-            // Show cheat message
             if (showCheatMessage) {
                 cheatMessageTimer++;
                 if (cheatMessageTimer > 120) {
@@ -535,52 +539,41 @@ _DISTANCE = 400;
                 ctx.fillText(isInvincible ? "INVINCIBILITY ON!" : "FLIGHT MODE ON!", canvas.width / 2, 30);
             }
 
-            // Update game speed
             if (gameSpeed < MAX_SPEED) {
                 gameSpeed += SPEED_INCREMENT;
             }
 
-            // Update score: Normal = 100 per 2 sec, Flight = 250 per second (1000 per 4 sec)
+            // Score: Normal = 100 per 2 sec, Flight = 1000 per 4 sec
             if (canFly) {
-                score += 250 / 60; // 250 points per second = 1000 points per 4 seconds in flight mode
+                score += 250 / 60; // 250 per second = 1000 per 4 seconds
             } else {
-                score += 100 / 120; // 100 points per 2 seconds normally
+                score += 100 / 120; // 100 per 2 seconds
             }
 
-            // Check for milestones
             const currentScore = Math.floor(score);
             
-            // Check for special milestones
             if (currentScore > 0 && currentScore !== lastMilestoneScore) {
                 if (currentScore % 10000 === 0) {
-                    // 10000-point milestone (NOICE meme)
                     playSound('noice');
                     lastMilestoneScore = currentScore;
                 } else if (currentScore % 1000 === 0) {
-                    // 1000-point milestone (applause)
                     playSound('applause');
                     lastMilestoneScore = currentScore;
                 } else if (currentScore % 100 === 0) {
-                    // Regular 100-point milestone (ding)
                     playSound('ding');
                     lastMilestoneScore = currentScore;
                 }
             }
 
-            // Update dino
             dino.update();
 
-            // Spawn and update obstacles
             spawnObstacle();
             obstacles = obstacles.filter(obs => {
                 obs.update();
                 return obs.x > -obs.width;
             });
 
-            // Check collisions
             checkCollisions();
-
-            // Draw score
             drawScore();
 
             frameCount++;
@@ -599,7 +592,6 @@ _DISTANCE = 400;
 
                 if (isGameOver) return;
 
-                // Triple space for flight mode
                 const now = Date.now();
                 if (now - lastSpaceTime < 1000) {
                     spaceCount++;
@@ -619,7 +611,6 @@ _DISTANCE = 400;
                 }
             }
 
-            // Arrow controls during flight - smooth continuous movement
             if (e.code === 'ArrowUp' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
                 keysPressed.up = true;
@@ -630,12 +621,10 @@ _DISTANCE = 400;
                 keysPressed.down = true;
             }
 
-            // R key - Invincibility toggle when playing, restart when game over
             if (e.code === 'KeyR') {
                 if (isGameOver) {
                     resetGame();
                 } else if (gameStarted) {
-                    // Toggle invincibility
                     isInvincible = !isInvincible;
                     showCheatMessage = true;
                     cheatMessageTimer = 0;
@@ -645,7 +634,6 @@ _DISTANCE = 400;
         });
 
         document.addEventListener('keyup', (e) => {
-            // Release arrow keys for smooth movement
             if (e.code === 'ArrowUp') {
                 keysPressed.up = false;
             }
@@ -662,7 +650,6 @@ _DISTANCE = 400;
 
             if (isGameOver) return;
 
-            // Triple click for flight mode
             const now = Date.now();
             if (now - lastTapTime < 1000) {
                 tapCount++;
@@ -682,12 +669,10 @@ _DISTANCE = 400;
             }
         });
 
-        // Prevent scrolling
         canvas.addEventListener('touchstart', (e) => {
             e.preventDefault();
         });
 
-        // Start the game
         console.log('🦖 Dino Game loaded! High score:', highScore);
         animate();
     </script>
