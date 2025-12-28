@@ -41,6 +41,9 @@
         let clouds = [];
         let mountains = 0;
         let dayTime = 0;
+        let biome = 'forest'; // forest, desert, snow
+        let biomeTimer = 0;
+        let biomeTransition = 0;
         
         let canFly = false;
         let invincible = false;
@@ -51,23 +54,35 @@
         
         let keys = { up: false, down: false };
 
-        const noice = new Audio('audiotrimmer_adesehy.mp3');
-        const applause = new Audio('aplausos_2.mp3');
-        const death = new Audio('directed-by-robert-b_voI2Z4T.mp3');
+        const noice = new Audio();
+        noice.src = 'audiotrimmer_adesehy.mp3';
+        noice.volume = 0.5;
+        
+        const applause = new Audio();
+        applause.src = 'aplausos_2.mp3';
+        applause.volume = 0.5;
+        
+        const death = new Audio();
+        death.src = 'directed-by-robert-b_voI2Z4T.mp3';
+        death.volume = 0.5;
         
         const audio = new (window.AudioContext || window.webkitAudioContext)();
 
         function beep(freq) {
-            const now = audio.currentTime;
-            const osc = audio.createOscillator();
-            const gain = audio.createGain();
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.1, now);
-            gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-            osc.connect(gain);
-            gain.connect(audio.destination);
-            osc.start(now);
-            osc.stop(now + 0.2);
+            try {
+                const now = audio.currentTime;
+                const osc = audio.createOscillator();
+                const gain = audio.createGain();
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audio.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } catch(e) {
+                console.log('Audio error:', e);
+            }
         }
 
         const dino = {
@@ -259,7 +274,9 @@
             constructor(x, layer) {
                 this.x = x;
                 this.layer = layer;
-                this.h = 40 + Math.random() * 20;
+                this.h = 35 + Math.random() * 25;
+                this.w = 12 + Math.random() * 8;
+                this.type = Math.floor(Math.random() * 3); // 3 tree types
             }
             
             update() {
@@ -270,13 +287,77 @@
                 const alpha = this.layer === 0 ? 0.3 : 0.5;
                 ctx.globalAlpha = alpha;
                 
-                ctx.fillStyle = isDark() ? '#4a3f35' : '#8B4513';
-                ctx.fillRect(this.x, GROUND + 47 - this.h, 5, this.h);
+                const trunkColor = isDark() ? '#3d3428' : '#6B4423';
+                const leafColor = isDark() ? '#1a5d1a' : '#2d6b2d';
+                const darkLeaf = isDark() ? '#134013' : '#1e5a1e';
                 
-                ctx.fillStyle = isDark() ? '#1a4d1a' : '#228B22';
-                ctx.beginPath();
-                ctx.arc(this.x + 2.5, GROUND + 47 - this.h - 8, 12, 0, Math.PI * 2);
-                ctx.fill();
+                const baseY = GROUND + 47;
+                const trunkW = this.w * 0.3;
+                const trunkX = this.x + this.w / 2 - trunkW / 2;
+                
+                if (this.type === 0) {
+                    // Pine tree
+                    ctx.fillStyle = trunkColor;
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    // Layers of foliage
+                    ctx.fillStyle = leafColor;
+                    for (let i = 0; i < 4; i++) {
+                        const y = baseY - this.h - 5 + i * 8;
+                        const w = this.w * (1.2 - i * 0.2);
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.w / 2, y - 10);
+                        ctx.lineTo(this.x + this.w / 2 - w / 2, y);
+                        ctx.lineTo(this.x + this.w / 2 + w / 2, y);
+                        ctx.fill();
+                    }
+                    
+                } else if (this.type === 1) {
+                    // Round tree
+                    ctx.fillStyle = trunkColor;
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    // Fluffy foliage circles
+                    ctx.fillStyle = leafColor;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.6, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = darkLeaf;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 - this.w * 0.3, baseY - this.h - 5, this.w * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = leafColor;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 + this.w * 0.3, baseY - this.h - 5, this.w * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                } else {
+                    // Bushy tree
+                    ctx.fillStyle = trunkColor;
+                    ctx.fillRect(trunkX, baseY - this.h * 0.6, trunkW, this.h * 0.6);
+                    
+                    // Multiple foliage clumps
+                    const foliageY = baseY - this.h;
+                    ctx.fillStyle = darkLeaf;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2, foliageY - 5, this.w * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = leafColor;
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 - this.w * 0.35, foliageY, this.w * 0.45, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 + this.w * 0.35, foliageY, this.w * 0.45, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2, foliageY + this.h * 0.15, this.w * 0.4, 0, Math.PI * 2);
+                    ctx.fill();
+                }
                 
                 ctx.globalAlpha = 1;
             }
@@ -510,12 +591,31 @@
         }
 
         function drawGround() {
-            ctx.strokeStyle = isDark() ? '#555' : '#654321';
+            let groundColor, lineColor;
+            
+            if (biome === 'desert') {
+                groundColor = isDark() ? '#8B7355' : '#D2B48C';
+                lineColor = isDark() ? '#6B5345' : '#BC9B6A';
+            } else if (biome === 'snow') {
+                groundColor = isDark() ? '#D0E0F0' : '#F0F8FF';
+                lineColor = isDark() ? '#B0C8E0' : '#D0E0F0';
+            } else {
+                groundColor = isDark() ? '#666' : '#8B7355';
+                lineColor = isDark() ? '#555' : '#654321';
+            }
+            
+            ctx.strokeStyle = lineColor;
             ctx.lineWidth = 3;
             ctx.beginPath();
             ctx.moveTo(0, GROUND + 47);
             ctx.lineTo(canvas.width, GROUND + 47);
             ctx.stroke();
+            
+            // Ground texture
+            ctx.fillStyle = groundColor;
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.fillRect(i + (frame % 20), GROUND + 50, 2, 2);
+            }
         }
 
         function drawScore() {
@@ -606,11 +706,19 @@
             const s = Math.floor(score);
             if (s > 0 && s % 100 === 0 && Math.floor(score - (canFly ? 250/60 : 100/120)) !== s) {
                 if (s % 10000 === 0) {
-                    noice.currentTime = 0;
-                    noice.play().catch(e => console.log(e));
+                    try {
+                        noice.currentTime = 0;
+                        noice.play().catch(e => console.log('Noice audio:', e));
+                    } catch(e) {
+                        beep(1200);
+                    }
                 } else if (s % 1000 === 0) {
-                    applause.currentTime = 0;
-                    applause.play().catch(e => console.log(e));
+                    try {
+                        applause.currentTime = 0;
+                        applause.play().catch(e => console.log('Applause audio:', e));
+                    } catch(e) {
+                        beep(1100);
+                    }
                 } else {
                     beep(1000);
                 }
@@ -626,7 +734,7 @@
                 return p.life > 0;
             });
 
-            if (Math.random() > 0.97) {
+            if (Math.random() > 0.92) {
                 trees.push(new Tree(canvas.width, Math.random() > 0.5 ? 0 : 1));
             }
             
@@ -639,7 +747,11 @@
 
             nextSpawn--;
             if (nextSpawn <= 0) {
-                obstacles.push(new Cactus());
+                if (Math.random() > 0.3) {
+                    obstacles.push(new Cactus());
+                } else {
+                    obstacles.push(new Ptero());
+                }
                 nextSpawn = 350 + Math.random() * 350;
             }
 
@@ -649,8 +761,12 @@
                 
                 if (!invincible && o.hits(dino)) {
                     gameOver = true;
-                    death.currentTime = 0;
-                    death.play().catch(e => console.log(e));
+                    try {
+                        death.currentTime = 0;
+                        death.play().catch(e => console.log('Death audio:', e));
+                    } catch(e) {
+                        beep(200);
+                    }
                     if (score > highScore) {
                         highScore = score;
                         localStorage.setItem('highScore', Math.floor(highScore));
@@ -668,7 +784,9 @@
         }
 
         document.addEventListener('keydown', e => {
-            if (audio.state === 'suspended') audio.resume();
+            try {
+                if (audio.state === 'suspended') audio.resume();
+            } catch(err) {}
             
             if (e.code === 'Space' || e.code === 'ArrowUp') {
                 e.preventDefault();
@@ -737,7 +855,9 @@
         });
 
         canvas.addEventListener('click', () => {
-            if (audio.state === 'suspended') audio.resume();
+            try {
+                if (audio.state === 'suspended') audio.resume();
+            } catch(err) {}
             
             if (!started) {
                 started = true;
