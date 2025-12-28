@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Dino Game</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
         body { 
-            margin: 0; 
-            display: flex; 
+            display: flex;
+            flex-direction: column;
             justify-content: center; 
             align-items: center; 
-            height: 100vh; 
+            min-height: 100vh; 
             background-color: #f7f7f7; 
             font-family: 'Courier New', Courier, monospace; 
             overflow: hidden; 
@@ -20,16 +25,40 @@
             position: relative; 
             width: 800px; 
             height: 200px; 
-            overflow: hidden; 
-            border-bottom: 2px solid #535353; 
             background-color: #fff; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
-        canvas { display: block; }
+        canvas { 
+            display: block; 
+            width: 100%;
+            height: 100%;
+        }
+        #info {
+            margin-top: 20px;
+            text-align: center;
+            color: #535353;
+            font-size: 14px;
+        }
+        #info p {
+            margin: 5px 0;
+        }
+        .key {
+            display: inline-block;
+            padding: 2px 6px;
+            background: #535353;
+            color: white;
+            border-radius: 3px;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
     <div id="container">
         <canvas id="gameCanvas"></canvas>
+    </div>
+    <div id="info">
+        <p><span class="key">SPACE</span> or <span class="key">CLICK</span> to jump | <span class="key">SPACE×3</span> or <span class="key">CLICK×3</span> for flight mode</p>
+        <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> to toggle gravity | <span class="key">R</span> after game over to restart</p>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -37,22 +66,26 @@
         canvas.width = 800;
         canvas.height = 200;
 
+        // Game constants
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
         const GROUND_Y = 150;
         const INITIAL_SPEED = 6;
         const SPEED_INCREMENT = 0.001;
         const MAX_SPEED = 13;
-        const OBSTACLE_SPAWN_DISTANCE = 600;
+        const OBSTACLE_MIN_DISTANCE = 400;
+        const OBSTACLE_MAX_DISTANCE = 800;
 
+        // Game state
         let gameSpeed = INITIAL_SPEED;
         let score = 0;
-        let highScore = localStorage.getItem('dinoHighScore') || 0;
+        let highScore = parseInt(localStorage.getItem('dinoHighScore')) || 0;
         let isGameOver = false;
         let gameStarted = false;
         let obstacles = [];
         let frameCount = 0;
         let animationFrameId;
+        let nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
 
         // Custom additions
         let canFly = false;
@@ -70,13 +103,25 @@
 
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
-        dinoImg.onload = () => dinoLoaded = true;
+        dinoImg.onload = () => {
+            dinoLoaded = true;
+            console.log('✓ Dino image loaded successfully');
+        };
+        dinoImg.onerror = () => {
+            console.log('✗ Dino image failed to load, using fallback graphics');
+        };
 
         const cactusImg = new Image();
         cactusImg.src = 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
-        cactusImg.onload = () => cactusLoaded = true;
+        cactusImg.onload = () => {
+            cactusLoaded = true;
+            console.log('✓ Cactus image loaded successfully');
+        };
+        cactusImg.onerror = () => {
+            console.log('✗ Cactus image failed to load, using fallback graphics');
+        };
 
-        // Audio context for sounds
+        // Audio context
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function playSound(type) {
@@ -96,7 +141,7 @@
                 osc.start();
                 osc.stop(now + 0.1);
             } else if (type === 'death') {
-                // Ominous heavy slowed down dun dun dunnn
+                // Ominous heavy slowed down "dun dun dunnn"
                 const notes = [{f:80,s:0,d:0.8},{f:75,s:0.9,d:0.8},{f:60,s:1.8,d:2.5}];
                 notes.forEach(n => {
                     const filter = audioCtx.createBiquadFilter();
@@ -120,9 +165,63 @@
                         osc.stop(now + n.s + n.d);
                     });
                 });
+            } else if (type === 'milestone') {
+                const osc = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                g.gain.setValueAtTime(0.1, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                osc.connect(g);
+                g.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.15);
             }
         }
 
+        // Fallback drawing functions
+        function drawDino(x, y, width, height, legFrame) {
+            ctx.fillStyle = canFly ? "#3498db" : "#535353";
+            
+            // Body
+            ctx.fillRect(x + 20, y, 22, 22);
+            // Neck
+            ctx.fillRect(x + 35, y + 10, 7, 12);
+            // Head
+            ctx.fillRect(x + 35, y + 2, 15, 10);
+            // Eye
+            ctx.fillStyle = "#fff";
+            ctx.fillRect(x + 45, y + 4, 3, 3);
+            
+            ctx.fillStyle = canFly ? "#3498db" : "#535353";
+            // Tail
+            ctx.fillRect(x + 10, y + 18, 12, 4);
+            ctx.fillRect(x, y + 16, 12, 4);
+            
+            // Legs (animated)
+            if (legFrame === 0) {
+                ctx.fillRect(x + 20, y + 22, 6, 10);
+                ctx.fillRect(x + 30, y + 22, 6, 10);
+            } else {
+                ctx.fillRect(x + 22, y + 22, 6, 10);
+                ctx.fillRect(x + 28, y + 22, 6, 10);
+            }
+        }
+
+        function drawCactus(x, y, width, height) {
+            ctx.fillStyle = "#535353";
+            // Main body
+            ctx.fillRect(x + 10, y, 10, height);
+            // Left arm
+            ctx.fillRect(x, y + 10, 10, 15);
+            ctx.fillRect(x, y + 10, 4, 20);
+            // Right arm
+            ctx.fillRect(x + 20, y + 15, 10, 15);
+            ctx.fillRect(x + 26, y + 15, 4, 20);
+        }
+
+        // Dino object
         const dino = {
             x: 50,
             y: GROUND_Y,
@@ -130,28 +229,27 @@
             height: 47,
             dy: 0,
             isJumping: false,
-            ducking: false,
             legFrame: 0,
             
             draw() {
-                // Draw dino image or fallback rectangle
+                // Try to draw image first, fall back to drawn dino
                 if (dinoLoaded) {
                     ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
                 } else {
-                    ctx.fillStyle = canFly ? "#3498db" : "#535353";
-                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    drawDino(this.x, this.y, this.width, this.height, this.legFrame);
                 }
 
-                // Custom addition: Flight enabled label
+                // Flight enabled label
                 if (canFly) {
                     ctx.fillStyle = "orange";
                     ctx.font = "bold 14px Courier";
+                    ctx.textAlign = "left";
                     ctx.fillText("FLIGHT ENABLED", this.x - 15, this.y - 10);
                 }
             },
 
             update() {
-                // Handle gravity and jumping (standard behavior)
+                // Handle gravity and jumping
                 if (!canFly) {
                     if (gravityEnabled) {
                         this.dy += GRAVITY;
@@ -164,7 +262,6 @@
                         }
                     }
                 } else {
-                    // Custom flight mode: no automatic positioning
                     this.dy = 0;
                 }
 
@@ -187,29 +284,23 @@
             }
         };
 
+        // Obstacle class
         class Obstacle {
-            constructor(type = 'cactus') {
-                this.type = type;
+            constructor() {
                 this.x = canvas.width;
-                
-                if (type === 'cactus') {
-                    this.width = 30;
-                    this.height = 45;
-                    this.y = GROUND_Y + (47 - this.height);
-                }
+                this.width = 30;
+                this.height = 45;
+                this.y = GROUND_Y + (47 - this.height);
             }
 
             update() {
                 this.x -= gameSpeed;
 
-                // Draw obstacle
-                if (this.type === 'cactus') {
-                    if (cactusLoaded) {
-                        ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
-                    } else {
-                        ctx.fillStyle = "#535353";
-                        ctx.fillRect(this.x, this.y, this.width, this.height);
-                    }
+                // Draw obstacle - try image first
+                if (cactusLoaded) {
+                    ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
+                } else {
+                    drawCactus(this.x, this.y, this.width, this.height);
                 }
             }
 
@@ -223,6 +314,7 @@
             }
         }
 
+        // Drawing functions
         function drawGround() {
             ctx.strokeStyle = '#535353';
             ctx.lineWidth = 2;
@@ -257,17 +349,25 @@
             ctx.fillText('Press SPACE or Click to Start', canvas.width / 2, canvas.height / 2);
         }
 
+        // Game logic functions
         function spawnObstacle() {
-            if (obstacles.length === 0 || 
-                canvas.width - obstacles[obstacles.length - 1].x > OBSTACLE_SPAWN_DISTANCE) {
-                if (Math.random() < 0.02) {
-                    obstacles.push(new Obstacle('cactus'));
+            if (obstacles.length === 0) {
+                nextObstacleDistance--;
+                if (nextObstacleDistance <= 0) {
+                    obstacles.push(new Obstacle());
+                    nextObstacleDistance = OBSTACLE_MIN_DISTANCE + Math.random() * (OBSTACLE_MAX_DISTANCE - OBSTACLE_MIN_DISTANCE);
+                }
+            } else {
+                const lastObstacle = obstacles[obstacles.length - 1];
+                if (canvas.width - lastObstacle.x > nextObstacleDistance) {
+                    obstacles.push(new Obstacle());
+                    nextObstacleDistance = OBSTACLE_MIN_DISTANCE + Math.random() * (OBSTACLE_MAX_DISTANCE - OBSTACLE_MIN_DISTANCE);
                 }
             }
         }
 
         function checkCollisions() {
-            if (canFly) return; // No collision when flying
+            if (canFly) return;
 
             for (let obstacle of obstacles) {
                 if (obstacle.collidesWith(dino)) {
@@ -283,7 +383,8 @@
             
             if (score > highScore) {
                 highScore = score;
-                localStorage.setItem('dinoHighScore', highScore);
+                localStorage.setItem('dinoHighScore', Math.floor(highScore));
+                console.log('🏆 New high score:', Math.floor(highScore));
             }
         }
 
@@ -297,6 +398,7 @@
             dino.y = GROUND_Y;
             dino.dy = 0;
             dino.isJumping = false;
+            nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
             
             // Reset custom additions
             canFly = false;
@@ -310,6 +412,7 @@
             animate();
         }
 
+        // Main game loop
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
@@ -330,7 +433,7 @@
                 return;
             }
 
-            // Custom addition: Show cheat message
+            // Show cheat message
             if (showCheatMessage) {
                 cheatMessageTimer++;
                 if (cheatMessageTimer > 120) {
@@ -343,13 +446,19 @@
                 ctx.fillText("CHEAT ENABLED!", canvas.width / 2, 30);
             }
 
-            // Update game speed (like real game)
+            // Update game speed
             if (gameSpeed < MAX_SPEED) {
                 gameSpeed += SPEED_INCREMENT;
             }
 
-            // Update score
+            // Update score (10 points per second at 60fps)
             score += 0.1;
+
+            // Check for milestone scores
+            const currentScore = Math.floor(score);
+            if (currentScore > 0 && currentScore % 100 === 0 && Math.floor(score - 0.1) !== currentScore) {
+                playSound('milestone');
+            }
 
             // Update dino
             dino.update();
@@ -397,66 +506,25 @@
                     showCheatMessage = true;
                     cheatMessageTimer = 0;
                     spaceCount = 0;
+                    console.log('✈️ Flight mode activated!');
                 } else {
                     dino.jump();
                 }
             }
 
-            // Custom addition: Arrow controls during flight
-            if (e.code === 'ArrowUp' && canFly && gameStarted) {
+            // Arrow controls during flight
+            if (e.code === 'ArrowUp' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
                 dino.y = Math.max(20, dino.y - 5);
             }
 
-            if (e.code === 'ArrowDown' && canFly && gameStarted) {
+            if (e.code === 'ArrowDown' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
                 dino.y = Math.min(GROUND_Y, dino.y + 5);
             }
 
-            // Custom addition: R key for gravity toggle or restart
+            // R key for gravity toggle or restart
             if (e.code === 'KeyR') {
                 if (canFly && !isGameOver) {
                     gravityEnabled = !gravityEnabled;
-                } else if (isGameOver) {
-                    resetGame();
-                }
-            }
-        });
-
-        canvas.addEventListener('click', () => {
-            if (!gameStarted) {
-                gameStarted = true;
-                return;
-            }
-
-            if (isGameOver) return;
-
-            // Triple click for flight mode
-            const now = Date.now();
-            if (now - lastTapTime < 1000) {
-                tapCount++;
-            } else {
-                tapCount = 1;
-            }
-            lastTapTime = now;
-
-            if (tapCount >= 3 && !canFly) {
-                canFly = true;
-                showCheatMessage = true;
-                cheatMessageTimer = 0;
-                tapCount = 0;
-            } else {
-                dino.jump();
-            }
-        });
-
-        // Prevent scrolling on mobile
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-        });
-
-        // Start the game
-        animate();
-    </script>
-</body>
-</html>
+                    console.log('🌍
