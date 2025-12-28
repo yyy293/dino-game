@@ -2,21 +2,15 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Main Edition</title>
+    <title>Dino Warp: Auto Edition</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
-        #overlay { position: absolute; width: 100%; height: 100%; background: #000; color: #0f0; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; z-index: 1000; }
-        h1 { font-size: 32px; letter-spacing: 8px; }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="overlay" onclick="igniteSystem()">
-            <h1>SYSTEM OFFLINE</h1>
-            <p style="color:white;">[ CLICK TO ACTIVATE ]</p>
-        </div>
         <canvas id="gameCanvas"></canvas>
     </div>
 
@@ -25,182 +19,171 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 800; canvas.height = 350;
 
-        // --- AUDIO PATHS UPDATED TO 'main/' ---
+        // --- AUDIO CONFIG ---
         const snd = {
             m1k: new Audio('main/aplausos_2.mp3'),
             m10k: new Audio('main/-audiotrimmer_adesehy.mp3'),
             lose: new Audio('main/directed-by-robert-b_voI2Z4T.mp3')
         };
 
-        let audioUnlocked = false;
-        function igniteSystem() {
-            // Force browser to allow audio on this user gesture
-            for (let s in snd) {
-                snd[s].play().then(() => {
-                    snd[s].pause();
-                    snd[s].currentTime = 0;
-                }).catch(e => console.warn("Audio file missing in main/ folder: ", s));
-            }
-            audioUnlocked = true;
-            document.getElementById('overlay').style.display = 'none';
-            state.started = true;
-            gameLoop();
+        // Pre-load logic to help with "automatic" playback
+        for (let key in snd) {
+            snd[key].preload = 'auto';
+            snd[key].load();
         }
 
         let state = {
             started: false, over: false, score: 0, speed: 6,
             highScore: localStorage.getItem('dinoHS') || 0,
-            canFly: false, spaceHits: 0, lastSpace: 0, frame: 0,
-            m1kPlayed: false, m10kPlayed: false, cracks: []
+            frame: 0, m1kPlayed: false, m10kPlayed: false,
+            isDucking: false
         };
 
-        const dino = { x: 50, y: 270, dy: 0, ground: 270 };
-        let obstacles = [], birds = [], stars = [], trail = [];
+        const dino = { x: 50, y: 280, dy: 0, ground: 280, w: 40, h: 40 };
+        let obstacles = [], birds = [], stars = [];
 
-        for(let i=0; i<60; i++) stars.push({x: Math.random()*800, y: Math.random()*250, r: Math.random()*1.5});
+        // Setup stars for night mode
+        for(let i=0; i<40; i++) stars.push({x: Math.random()*800, y: Math.random()*200, r: Math.random()*1.5});
 
         function gameLoop() {
-            if (state.over || !state.started) return;
-            update();
+            if (state.over) return;
+            if (state.started) update();
             draw();
             requestAnimationFrame(gameLoop);
         }
 
         function update() {
             state.frame++;
-            state.score += state.canFly ? 5 : 0.15;
-            
-            // Audio Logic
-            if (audioUnlocked) {
-                if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play(); state.m1kPlayed = true; }
-                if (state.score >= 10000 && !state.m10kPlayed) { snd.m10k.play(); state.m10kPlayed = true; }
-            }
+            state.score += 0.08; // Slower point collection as requested
+
+            // Milestone Audio
+            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play(); state.m1kPlayed = true; }
+            if (state.score >= 10000 && !state.m10kPlayed) { snd.m10k.play(); state.m10kPlayed = true; }
 
             // Physics
-            if (!state.canFly) {
-                dino.dy += 0.8; 
-                dino.y += dino.dy;
-                if (dino.y >= dino.ground) { dino.y = dino.ground; dino.dy = 0; }
-            } else {
-                trail.push({x: dino.x, y: dino.y + 15, l: 1});
+            dino.dy += 0.8; 
+            dino.y += dino.dy;
+            if (dino.y >= dino.ground) { dino.y = dino.ground; dino.dy = 0; }
+            
+            state.speed += 0.001;
+
+            // Spawn Obstacles (Cacti) - No floating
+            if (state.frame % Math.max(45, Math.floor(700/state.speed)) === 0) {
+                obstacles.push({x: 850, y: 280, w: 25, h: 40});
             }
 
-            state.speed += state.canFly ? 0.07 : 0.002;
-            let mach = state.speed / 45;
-
-            // Shatter logic at Mach 2
-            if (mach >= 2 && state.frame % 15 === 0 && state.cracks.length < 30) {
-                state.cracks.push({x1: 15+Math.random()*160, y1: 285+Math.random()*50, x2: 15+Math.random()*160, y2: 285+Math.random()*50});
+            // Spawn Pterodactyls (Every 500 points)
+            if (state.score >= 500 && state.frame % 160 === 0) {
+                let birdHeight = Math.random() > 0.5 ? 230 : 275; // 230 requires ducking, 275 requires jumping
+                birds.push({x: 850, y: birdHeight, w: 40, h: 25});
             }
-
-            if (state.frame % Math.max(20, Math.floor(500/state.speed)) === 0) obstacles.push({x: 850, y: 270});
-            if (state.score > 500 && state.frame % 140 === 0) birds.push({x: 850, y: 140 + Math.random()*110});
 
             // Collision
-            [...obstacles, ...birds].forEach((o) => {
+            const checkHit = (o) => {
+                let hitH = state.isDucking ? 20 : 40;
+                let hitY = state.isDucking ? dino.y + 20 : dino.y;
+                return dino.x < o.x + o.w &&
+                       dino.x + 30 > o.x &&
+                       hitY < o.y + o.h &&
+                       hitY + hitH > o.y;
+            };
+
+            obstacles.forEach((o, i) => {
                 o.x -= state.speed;
-                if (dino.x < o.x + 25 && dino.x + 35 > o.x && dino.y < o.y + 30 && dino.y + 35 > o.y) {
-                    if (state.canFly) {
-                        obstacles = obstacles.filter(i => i !== o);
-                        birds = birds.filter(i => i !== o);
-                    } else {
-                        state.over = true;
-                        if (state.score > state.highScore) {
-                            state.highScore = Math.floor(state.score);
-                            localStorage.setItem('dinoHS', state.highScore);
-                        }
-                        if(audioUnlocked) snd.lose.play();
-                    }
-                }
+                if (checkHit(o)) endGame();
+                if (o.x < -50) obstacles.splice(i, 1);
             });
 
-            trail.forEach((t, i) => { t.x -= state.speed; t.l -= 0.05; if(t.l <= 0) trail.splice(i, 1); });
+            birds.forEach((b, i) => {
+                b.x -= (state.speed + 2);
+                if (checkHit(b)) endGame();
+                if (b.x < -50) birds.splice(i, 1);
+            });
+        }
+
+        function endGame() {
+            state.over = true;
+            snd.lose.play();
+            if (state.score > state.highScore) {
+                state.highScore = Math.floor(state.score);
+                localStorage.setItem('dinoHS', state.highScore);
+            }
         }
 
         function draw() {
-            let cycle = (state.score % 3000) / 3000; 
-            let isNight = cycle > 0.5;
-            ctx.fillStyle = isNight ? "#050510" : "#f7f7f7";
+            // Day/Night flip every 500 points
+            let isNight = Math.floor(state.score / 500) % 2 === 1;
+            ctx.fillStyle = isNight ? "#222" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-
             let color = isNight ? "#fff" : "#535353";
-            let mach = state.speed / 45;
 
-            // Celestial Body
-            let angle = (cycle * Math.PI * 2) - Math.PI/2;
-            ctx.fillStyle = isNight ? "#ddd" : "#ffcc00";
+            // Orbiting Sun/Moon
+            let orbit = (state.score % 500) / 500;
+            ctx.fillStyle = isNight ? "#f0f0f0" : "#ffcc00";
             ctx.beginPath();
-            ctx.arc(400 + Math.cos(angle)*350, 200 + Math.sin(angle)*180, 25, 0, Math.PI*2);
+            ctx.arc(800 - (orbit * 850), 60 + Math.sin(orbit * Math.PI) * 30, 25, 0, Math.PI*2);
             ctx.fill();
 
-            // Stars / Warp Lines
-            ctx.strokeStyle = "#fff"; ctx.fillStyle = "#fff";
-            stars.forEach(s => {
-                s.x -= (state.speed * 0.4); if (s.x < 0) s.x = 800;
-                if (mach >= 3) { ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(s.x+60, s.y); ctx.stroke(); }
-                else { ctx.fillRect(s.x, s.y, s.r, s.r); }
-            });
+            if (isNight) {
+                ctx.fillStyle = "#666";
+                stars.forEach(s => ctx.fillRect(s.x, s.y, s.r, s.r));
+            }
 
-            trail.forEach(t => { ctx.fillStyle = `rgba(255,100,0,${t.l})`; ctx.fillRect(t.x, t.y, 6, 6); });
-
-            // Dino (Quantum Flicker at Mach 3)
-            ctx.save();
-            if (mach >= 3) { ctx.globalAlpha = 0.7; ctx.fillStyle = (state.frame % 2 === 0) ? "#0ff" : "#fff"; }
-            else { ctx.fillStyle = color; }
-            ctx.fillRect(dino.x+15, dino.y, 20, 10); ctx.fillRect(dino.x+10, dino.y+10, 25, 20);
-            ctx.fillRect(dino.x, dino.y+12, 10, 10); ctx.fillRect(dino.x+12, dino.y+30, 6, 10); ctx.fillRect(dino.x+25, dino.y+30, 6, 10);
-            ctx.restore();
+            // Dino
+            ctx.fillStyle = color;
+            if (state.isDucking) {
+                ctx.fillRect(dino.x, dino.y + 20, 45, 20); // Ducking shape
+            } else {
+                ctx.fillRect(dino.x + 15, dino.y, 20, 15); // Head
+                ctx.fillRect(dino.x + 10, dino.y + 10, 25, 25); // Body
+                ctx.fillRect(dino.x + 12, dino.y + 35, 6, 8); // Legs
+                ctx.fillRect(dino.x + 25, dino.y + 35, 6, 8);
+            }
 
             // Obstacles
-            ctx.fillStyle = color;
-            obstacles.forEach(o => { ctx.fillRect(o.x+10, o.y, 10, 40); ctx.fillRect(o.x, o.y+10, 10, 15); ctx.fillRect(o.x+20, o.y+15, 10, 12); });
+            ctx.fillStyle = isNight ? "#77ff77" : "#535353";
+            obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
+
+            // Birds (Animated wings)
             birds.forEach(b => {
-                ctx.fillRect(b.x, b.y, 35, 6); 
-                ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(b.x+17, b.y - (state.frame%20 < 10 ? 12 : -12)); ctx.lineTo(b.x+35, b.y); ctx.stroke();
+                ctx.fillStyle = isNight ? "#ff7777" : "#535353";
+                ctx.fillRect(b.x, b.y, b.w, 10);
+                let flap = (state.frame % 20 < 10) ? -12 : 12;
+                ctx.fillRect(b.x + 10, b.y + (flap < 0 ? flap : 0), 5, Math.abs(flap));
             });
 
-            // HUD & Shatter
-            ctx.save();
-            if (mach >= 2) { 
-                ctx.translate(Math.random()*4-2, Math.random()*4-2); 
-                ctx.fillStyle = (state.frame % 6 < 3) ? "#f00" : "#fff";
-                ctx.strokeStyle = "rgba(255,0,0,0.4)";
-                state.cracks.forEach(c => { ctx.beginPath(); ctx.moveTo(c.x1, c.y1); ctx.lineTo(c.x2, c.y2); ctx.stroke(); });
-            } else {
-                ctx.fillStyle = (mach >= 1) ? "#ff6600" : color;
-            }
-            ctx.font = "bold 16px Courier New";
-            ctx.fillText(`VEL: ${Math.floor(state.speed * 12)} KM/H`, 20, 330);
-            ctx.fillText(`MACH: ${mach.toFixed(1)}`, 20, 310);
-            ctx.restore();
-
-            ctx.fillStyle = color; ctx.textAlign = "right";
+            // HUD
+            ctx.fillStyle = color;
+            ctx.font = "16px Courier New";
+            ctx.textAlign = "right";
             ctx.fillText(`HI ${state.highScore.toString().padStart(5, '0')}  ${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
 
+            if (!state.started) {
+                ctx.textAlign = "center";
+                ctx.fillText("PRESS SPACE TO START", 400, 175);
+            }
             if (state.over) {
-                ctx.fillStyle = "rgba(0,0,0,0.8)"; ctx.fillRect(0,0,800,350);
-                ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.fillText("REBOOT REQUIRED - PRESS R", 400, 175);
+                ctx.fillStyle = "rgba(0,0,0,0.8)";
+                ctx.fillRect(0, 0, 800, 350);
+                ctx.fillStyle = "#fff"; ctx.textAlign = "center";
+                ctx.fillText("GAME OVER - PRESS R", 400, 175);
             }
         }
 
         window.addEventListener('keydown', e => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (dino.y >= dino.ground && !state.canFly) dino.dy = -13;
-                let now = Date.now();
-                if (now - state.lastSpace < 300) state.spaceHits++; else state.spaceHits = 1;
-                state.lastSpace = now;
-                if (state.spaceHits >= 3 && !state.canFly) { state.canFly = true; state.speed = 45; }
+                if (!state.started) state.started = true;
+                if (dino.y >= dino.ground) dino.dy = -13;
             }
-            if (e.code === 'KeyR') {
-                if (state.over) location.reload();
-                else if (state.canFly) { state.canFly = false; state.speed = 10; }
-            }
-            if (state.canFly) {
-                if (e.code === 'ArrowUp') dino.y -= 45;
-                if (e.code === 'ArrowDown') dino.y += 45;
-                if (dino.y < 20) dino.y = 20; if (dino.y > 270) dino.y = 270;
-            }
+            if (e.code === 'ArrowDown') state.isDucking = true;
+            if (e.code === 'KeyR' && state.over) location.reload();
         });
+
+        window.addEventListener('keyup', e => {
+            if (e.code === 'ArrowDown') state.isDucking = false;
+        });
+
+        gameLoop();
     </script>
 </body>
 </html>
