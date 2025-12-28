@@ -58,8 +58,8 @@
     </div>
     <div id="info">
         <p><span class="key">SPACE</span> or <span class="key">CLICK</span> to jump | <span class="key">SPACE×3</span> or <span class="key">CLICK×3</span> for flight mode</p>
-        <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> to fall (anti-cheat) | <span class="key">R</span> after game over to restart</p>
-        <p style="color: #e74c3c; font-weight: bold;">⚠️ Cactuses can still hit you while flying!</p>
+        <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> for invincibility | <span class="key">R</span> after game over to restart</p>
+        <p style="color: #e74c3c; font-weight: bold;">⚠️ Cactuses can still hit you while flying (unless invincible)!</p>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -90,13 +90,21 @@
 
         // Custom additions
         let canFly = false;
+        let isInvincible = false;
         let spaceCount = 0;
         let lastSpaceTime = 0;
         let tapCount = 0;
         let lastTapTime = 0;
         let showCheatMessage = false;
         let cheatMessageTimer = 0;
-        let flightSpeed = 15; // Faster smooth flight movement speed
+        let flightSpeed = 4; // Smoother flight movement
+        let lastMilestoneScore = 0;
+
+        // Arrow key state for smoother continuous movement
+        let keysPressed = {
+            up: false,
+            down: false
+        };
 
         // Load images
         let dinoLoaded = false;
@@ -166,24 +174,53 @@
                         osc.stop(now + n.s + n.d);
                     });
                 });
-            } else if (type === 'milestone') {
+            } else if (type === 'ding') {
+                // Simple ding for 100-point milestones
                 const osc = audioCtx.createOscillator();
                 const g = audioCtx.createGain();
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(800, now);
                 osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-                g.gain.setValueAtTime(0.1, now);
-                g.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+                g.gain.setValueAtTime(0.15, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
                 osc.connect(g);
                 g.connect(audioCtx.destination);
                 osc.start();
-                osc.stop(now + 0.15);
+                osc.stop(now + 0.2);
+            } else if (type === 'applause') {
+                // Crowd applause for 1000-point milestones
+                const duration = 1.5;
+                for (let i = 0; i < 60; i++) {
+                    const delay = Math.random() * duration;
+                    const noise = audioCtx.createBufferSource();
+                    const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let j = 0; j < data.length; j++) {
+                        data[j] = Math.random() * 2 - 1;
+                    }
+                    noise.buffer = buffer;
+                    
+                    const filter = audioCtx.createBiquadFilter();
+                    filter.type = "bandpass";
+                    filter.frequency.value = 1000 + Math.random() * 2000;
+                    filter.Q.value = 0.5;
+                    
+                    const g = audioCtx.createGain();
+                    g.gain.setValueAtTime(0, now + delay);
+                    g.gain.linearRampToValueAtTime(0.03 + Math.random() * 0.02, now + delay + 0.01);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.05);
+                    
+                    noise.connect(filter);
+                    filter.connect(g);
+                    g.connect(audioCtx.destination);
+                    noise.start(now + delay);
+                }
             }
         }
 
         // Fallback drawing functions
         function drawDino(x, y, width, height, legFrame) {
-            ctx.fillStyle = canFly ? "#3498db" : "#535353";
+            ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
             
             // Body
             ctx.fillRect(x + 20, y, 22, 22);
@@ -195,7 +232,7 @@
             ctx.fillStyle = "#fff";
             ctx.fillRect(x + 45, y + 4, 3, 3);
             
-            ctx.fillStyle = canFly ? "#3498db" : "#535353";
+            ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
             // Tail
             ctx.fillRect(x + 10, y + 18, 12, 4);
             ctx.fillRect(x, y + 16, 12, 4);
@@ -231,9 +268,15 @@
             dy: 0,
             isJumping: false,
             legFrame: 0,
-            targetY: GROUND_Y, // For smooth flight movement
+            targetY: GROUND_Y,
             
             draw() {
+                // Flashing effect for invincibility
+                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.6;
+                }
+
                 // Try to draw image first, fall back to drawn dino
                 if (dinoLoaded) {
                     ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
@@ -241,18 +284,39 @@
                     drawDino(this.x, this.y, this.width, this.height, this.legFrame);
                 }
 
-                // Flight enabled label
-                if (canFly) {
-                    ctx.fillStyle = "orange";
+                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
+                    ctx.restore();
+                }
+
+                // Flight or invincibility label
+                if (canFly || isInvincible) {
+                    ctx.fillStyle = isInvincible ? "#f39c12" : "orange";
                     ctx.font = "bold 14px Courier";
                     ctx.textAlign = "left";
-                    ctx.fillText("FLIGHT ENABLED", this.x - 15, this.y - 10);
+                    if (isInvincible) {
+                        ctx.fillText("INVINCIBLE", this.x - 15, this.y - 10);
+                    } else if (canFly) {
+                        ctx.fillText("FLIGHT ENABLED", this.x - 15, this.y - 10);
+                    }
                 }
             },
 
             update() {
-                // Handle gravity and jumping
-                if (!canFly) {
+                // Handle smooth arrow key movement in flight mode
+                if (canFly) {
+                    if (keysPressed.up) {
+                        this.targetY = Math.max(20, this.targetY - flightSpeed);
+                    }
+                    if (keysPressed.down) {
+                        this.targetY = Math.min(GROUND_Y, this.targetY + flightSpeed);
+                    }
+                    
+                    // Smooth interpolation
+                    const diff = this.targetY - this.y;
+                    this.y += diff * 0.3;
+                    this.dy = 0;
+                } else {
+                    // Normal gravity
                     this.dy += GRAVITY;
                     this.y += this.dy;
 
@@ -261,11 +325,6 @@
                         this.dy = 0;
                         this.isJumping = false;
                     }
-                } else {
-                    // Smooth flight movement
-                    const diff = this.targetY - this.y;
-                    this.y += diff * 0.2; // Smooth interpolation
-                    this.dy = 0;
                 }
 
                 // Animate legs when running on ground
@@ -370,7 +429,9 @@
         }
 
         function checkCollisions() {
-            // Cactuses can make you lose even while flying!
+            // Invincibility prevents collisions
+            if (isInvincible) return;
+
             for (let obstacle of obstacles) {
                 if (obstacle.collidesWith(dino)) {
                     gameOver();
@@ -405,11 +466,13 @@
             
             // Reset custom additions
             canFly = false;
+            isInvincible = false;
             spaceCount = 0;
             tapCount = 0;
             showCheatMessage = false;
             cheatMessageTimer = 0;
-            flightSpeed = 8;
+            lastMilestoneScore = 0;
+            keysPressed = { up: false, down: false };
             
             cancelAnimationFrame(animationFrameId);
             animate();
@@ -443,10 +506,10 @@
                     showCheatMessage = false;
                     cheatMessageTimer = 0;
                 }
-                ctx.fillStyle = "orange";
+                ctx.fillStyle = isInvincible ? "#f39c12" : "orange";
                 ctx.font = "bold 20px Courier";
                 ctx.textAlign = "center";
-                ctx.fillText("CHEAT ENABLED!", canvas.width / 2, 30);
+                ctx.fillText(isInvincible ? "INVINCIBILITY ON!" : "FLIGHT MODE ON!", canvas.width / 2, 30);
             }
 
             // Update game speed
@@ -454,13 +517,23 @@
                 gameSpeed += SPEED_INCREMENT;
             }
 
-            // Update score (10 points per second at 60fps)
-            score += 0.1;
+            // Update score: 100 points every 2 seconds (at 60fps = 120 frames)
+            // 100 points / 120 frames = 0.833... points per frame
+            score += 100 / 120;
 
-            // Check for milestone scores
+            // Check for milestones
             const currentScore = Math.floor(score);
-            if (currentScore > 0 && currentScore % 100 === 0 && Math.floor(score - 0.1) !== currentScore) {
-                playSound('milestone');
+            
+            // Check for 100-point milestones (ding)
+            if (currentScore > 0 && currentScore % 100 === 0 && currentScore !== lastMilestoneScore) {
+                if (currentScore % 1000 === 0) {
+                    // 1000-point milestone (applause)
+                    playSound('applause');
+                } else {
+                    // Regular 100-point milestone (ding)
+                    playSound('ding');
+                }
+                lastMilestoneScore = currentScore;
             }
 
             // Update dino
@@ -515,28 +588,38 @@
                 }
             }
 
-            // Arrow controls during flight - smooth and faster
+            // Arrow controls during flight - smooth continuous movement
             if (e.code === 'ArrowUp' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
-                dino.targetY = Math.max(20, dino.targetY - flightSpeed);
+                keysPressed.up = true;
             }
 
             if (e.code === 'ArrowDown' && canFly && gameStarted && !isGameOver) {
                 e.preventDefault();
-                dino.targetY = Math.min(GROUND_Y, dino.targetY + flightSpeed);
+                keysPressed.down = true;
             }
 
-            // R key - Anti-cheat: makes you fall when flying, restart when game over
+            // R key - Invincibility toggle when playing, restart when game over
             if (e.code === 'KeyR') {
-                if (canFly && !isGameOver) {
-                    // Anti-cheat: disable flight and fall
-                    canFly = false;
-                    showCheatMessage = false;
-                    dino.dy = 0; // Start falling from current position
-                    console.log('⚠️ Flight disabled! Falling...');
-                } else if (isGameOver) {
+                if (isGameOver) {
                     resetGame();
+                } else if (gameStarted) {
+                    // Toggle invincibility
+                    isInvincible = !isInvincible;
+                    showCheatMessage = true;
+                    cheatMessageTimer = 0;
+                    console.log(isInvincible ? '🛡️ Invincibility activated!' : '⚠️ Invincibility deactivated!');
                 }
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            // Release arrow keys for smooth movement
+            if (e.code === 'ArrowUp') {
+                keysPressed.up = false;
+            }
+            if (e.code === 'ArrowDown') {
+                keysPressed.down = false;
             }
         });
 
