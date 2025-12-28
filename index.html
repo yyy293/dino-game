@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Auto Edition</title>
+    <title>Dino Warp: Audio Branch Edition</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; }
         canvas { display: block; width: 100%; height: 100%; }
+        #audio-hint { position: absolute; top: 10px; left: 10px; font-size: 10px; color: #999; pointer-events: none; z-index: 10; }
     </style>
 </head>
 <body>
-    <div id="container">
+    <div id="container" onclick="unlockAudio()">
+        <div id="audio-hint">CLICK ANYWHERE TO SYNC AUDIO FROM BRANCH</div>
         <canvas id="gameCanvas"></canvas>
     </div>
 
@@ -19,31 +21,40 @@
         const ctx = canvas.getContext('2d');
         canvas.width = 800; canvas.height = 350;
 
-        // --- AUDIO CONFIG ---
-        const snd = {
-            m1k: new Audio('main/aplausos_2.mp3'),
-            m10k: new Audio('main/-audiotrimmer_adesehy.mp3'),
-            lose: new Audio('main/directed-by-robert-b_voI2Z4T.mp3')
-        };
+        const GROUND_Y = 310;
 
-        // Pre-load logic to help with "automatic" playback
-        for (let key in snd) {
-            snd[key].preload = 'auto';
-            snd[key].load();
-        }
+        // --- UPDATED AUDIO PATHS FOR GITHUB BRANCH ---
+        // Replace 'YOUR_USERNAME' with your actual GitHub username
+        const GITHUB_BASE = "https://raw.githubusercontent.com/redmae/dino-game/audio/";
+        
+        const snd = {
+            m1k: new Audio(GITHUB_BASE + "aplausos_2.mp3"),
+            m10k: new Audio(GITHUB_BASE + "-audiotrimmer_adesehy.mp3"),
+            lose: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
+        };
 
         let state = {
             started: false, over: false, score: 0, speed: 6,
             highScore: localStorage.getItem('dinoHS') || 0,
             frame: 0, m1kPlayed: false, m10kPlayed: false,
-            isDucking: false
+            isDucking: false, audioUnlocked: false
         };
 
-        const dino = { x: 50, y: 280, dy: 0, ground: 280, w: 40, h: 40 };
-        let obstacles = [], birds = [], stars = [];
+        const dino = { x: 50, y: GROUND_Y - 40, dy: 0, w: 40, h: 40 };
+        let obstacles = [], birds = [], stars = [], clouds = [], particles = [];
 
-        // Setup stars for night mode
-        for(let i=0; i<40; i++) stars.push({x: Math.random()*800, y: Math.random()*200, r: Math.random()*1.5});
+        // Environment Setup
+        for(let i=0; i<30; i++) stars.push({x: Math.random()*800, y: Math.random()*200, r: Math.random()*1.5});
+        for(let i=0; i<5; i++) clouds.push({x: Math.random()*800, y: 30 + Math.random()*70, s: 0.2 + Math.random()*0.8, w: 40 + Math.random()*40});
+
+        function unlockAudio() {
+            if (state.audioUnlocked) return;
+            for (let s in snd) {
+                snd[s].play().then(() => { snd[s].pause(); snd[s].currentTime = 0; }).catch(e => console.warn("Audio load blocked: " + e));
+            }
+            state.audioUnlocked = true;
+            document.getElementById('audio-hint').style.display = 'none';
+        }
 
         function gameLoop() {
             if (state.over) return;
@@ -54,56 +65,58 @@
 
         function update() {
             state.frame++;
-            state.score += 0.08; // Slower point collection as requested
+            state.score += 0.07; 
 
-            // Milestone Audio
-            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play(); state.m1kPlayed = true; }
-            if (state.score >= 10000 && !state.m10kPlayed) { snd.m10k.play(); state.m10kPlayed = true; }
+            // Audio Logic
+            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play().catch(()=>{}); state.m1kPlayed = true; }
+            if (state.score >= 10000 && !state.m10kPlayed) { snd.m10k.play().catch(()=>{}); state.m10kPlayed = true; }
 
-            // Physics
+            // Physics & Particles
             dino.dy += 0.8; 
             dino.y += dino.dy;
-            if (dino.y >= dino.ground) { dino.y = dino.ground; dino.dy = 0; }
+            let curH = state.isDucking ? 25 : 40;
+            if (dino.y > GROUND_Y - curH) { dino.y = GROUND_Y - curH; dino.dy = 0; }
             
-            state.speed += 0.001;
+            state.speed += 0.0012;
 
-            // Spawn Obstacles (Cacti) - No floating
-            if (state.frame % Math.max(45, Math.floor(700/state.speed)) === 0) {
-                obstacles.push({x: 850, y: 280, w: 25, h: 40});
+            if (dino.y >= GROUND_Y - curH && state.frame % 5 === 0) {
+                particles.push({x: dino.x, y: GROUND_Y - 5, vx: -2, vy: -Math.random(), life: 1});
+            }
+            particles.forEach((p, i) => {
+                p.x += p.vx; p.y += p.vy; p.life -= 0.02;
+                if (p.life <= 0) particles.splice(i, 1);
+            });
+
+            // Parallax Clouds
+            clouds.forEach(c => { c.x -= c.s * 1.5; if(c.x < -150) c.x = 850; });
+
+            // Spawn Logic
+            if (state.frame % Math.max(50, Math.floor(900/state.speed)) === 0) {
+                obstacles.push({x: 850, y: GROUND_Y - 40, w: 25, h: 40});
+            }
+            if (state.score >= 500 && state.frame % 150 === 0) {
+                let birdY = Math.random() > 0.5 ? GROUND_Y - 75 : GROUND_Y - 30; 
+                birds.push({x: 850, y: birdY, w: 42, h: 25});
             }
 
-            // Spawn Pterodactyls (Every 500 points)
-            if (state.score >= 500 && state.frame % 160 === 0) {
-                let birdHeight = Math.random() > 0.5 ? 230 : 275; // 230 requires ducking, 275 requires jumping
-                birds.push({x: 850, y: birdHeight, w: 40, h: 25});
-            }
-
-            // Collision
+            // Movement & Collision
             const checkHit = (o) => {
-                let hitH = state.isDucking ? 20 : 40;
-                let hitY = state.isDucking ? dino.y + 20 : dino.y;
-                return dino.x < o.x + o.w &&
-                       dino.x + 30 > o.x &&
-                       hitY < o.y + o.h &&
-                       hitY + hitH > o.y;
+                let dH = state.isDucking ? 25 : 40;
+                return dino.x < o.x + o.w && dino.x + 30 > o.x && dino.y < o.y + o.h && dino.y + dH > o.y;
             };
 
-            obstacles.forEach((o, i) => {
-                o.x -= state.speed;
+            [...obstacles, ...birds].forEach(o => {
+                o.x -= (o.h === 25 ? state.speed + 2 : state.speed);
                 if (checkHit(o)) endGame();
-                if (o.x < -50) obstacles.splice(i, 1);
             });
-
-            birds.forEach((b, i) => {
-                b.x -= (state.speed + 2);
-                if (checkHit(b)) endGame();
-                if (b.x < -50) birds.splice(i, 1);
-            });
+            
+            obstacles = obstacles.filter(o => o.x > -60);
+            birds = birds.filter(b => b.x > -60);
         }
 
         function endGame() {
             state.over = true;
-            snd.lose.play();
+            snd.lose.play().catch(()=>{});
             if (state.score > state.highScore) {
                 state.highScore = Math.floor(state.score);
                 localStorage.setItem('dinoHS', state.highScore);
@@ -111,45 +124,62 @@
         }
 
         function draw() {
-            // Day/Night flip every 500 points
             let isNight = Math.floor(state.score / 500) % 2 === 1;
-            ctx.fillStyle = isNight ? "#222" : "#f7f7f7";
+            ctx.fillStyle = isNight ? "#1a1a1a" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            let color = isNight ? "#fff" : "#535353";
+            let color = isNight ? "#eee" : "#535353";
 
-            // Orbiting Sun/Moon
+            // Sun/Moon
             let orbit = (state.score % 500) / 500;
-            ctx.fillStyle = isNight ? "#f0f0f0" : "#ffcc00";
+            ctx.fillStyle = isNight ? "#fdfdbe" : "#ffcc00";
             ctx.beginPath();
-            ctx.arc(800 - (orbit * 850), 60 + Math.sin(orbit * Math.PI) * 30, 25, 0, Math.PI*2);
+            ctx.arc(800 - (orbit * 850), 65 + Math.sin(orbit * Math.PI) * 25, 25, 0, Math.PI*2);
             ctx.fill();
 
+            // Clouds (Parallax)
+            ctx.fillStyle = isNight ? "#333" : "#e0e0e0";
+            clouds.forEach(c => {
+                ctx.beginPath();
+                ctx.arc(c.x, c.y, c.w/4, 0, Math.PI*2);
+                ctx.arc(c.x + c.w/4, c.y - c.w/6, c.w/3, 0, Math.PI*2);
+                ctx.arc(c.x + c.w/2, c.y, c.w/4, 0, Math.PI*2);
+                ctx.fill();
+            });
+
             if (isNight) {
-                ctx.fillStyle = "#666";
+                ctx.fillStyle = "#555";
                 stars.forEach(s => ctx.fillRect(s.x, s.y, s.r, s.r));
             }
 
+            // Ground & Dust
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(800, GROUND_Y); ctx.stroke();
+            particles.forEach(p => {
+                ctx.fillStyle = `rgba(150,150,150,${p.life})`;
+                ctx.fillRect(p.x, p.y, 3, 3);
+            });
+
             // Dino
             ctx.fillStyle = color;
-            if (state.isDucking) {
-                ctx.fillRect(dino.x, dino.y + 20, 45, 20); // Ducking shape
-            } else {
-                ctx.fillRect(dino.x + 15, dino.y, 20, 15); // Head
-                ctx.fillRect(dino.x + 10, dino.y + 10, 25, 25); // Body
-                ctx.fillRect(dino.x + 12, dino.y + 35, 6, 8); // Legs
-                ctx.fillRect(dino.x + 25, dino.y + 35, 6, 8);
+            if (state.isDucking) { ctx.fillRect(dino.x, dino.y, 45, 25); } 
+            else {
+                ctx.fillRect(dino.x + 15, dino.y, 20, 15);
+                ctx.fillRect(dino.x + 10, dino.y + 10, 25, 25);
+                ctx.fillRect(dino.x + 12, dino.y + 32, 6, 8);
+                ctx.fillRect(dino.x + 25, dino.y + 32, 6, 8);
             }
 
             // Obstacles
-            ctx.fillStyle = isNight ? "#77ff77" : "#535353";
-            obstacles.forEach(o => ctx.fillRect(o.x, o.y, o.w, o.h));
-
-            // Birds (Animated wings)
+            obstacles.forEach(o => {
+                ctx.fillStyle = isNight ? "#55cc55" : "#535353";
+                ctx.fillRect(o.x, o.y, o.w, o.h);
+            });
             birds.forEach(b => {
-                ctx.fillStyle = isNight ? "#ff7777" : "#535353";
-                ctx.fillRect(b.x, b.y, b.w, 10);
-                let flap = (state.frame % 20 < 10) ? -12 : 12;
-                ctx.fillRect(b.x + 10, b.y + (flap < 0 ? flap : 0), 5, Math.abs(flap));
+                ctx.fillStyle = isNight ? "#cc5555" : "#535353";
+                ctx.fillRect(b.x, b.y, b.w, 8);
+                let flap = (state.frame % 20 < 10) ? -10 : 10;
+                ctx.fillRect(b.x + 15, b.y + (flap < 0 ? flap : 0), 4, Math.abs(flap));
             });
 
             // HUD
@@ -160,20 +190,21 @@
 
             if (!state.started) {
                 ctx.textAlign = "center";
-                ctx.fillText("PRESS SPACE TO START", 400, 175);
+                ctx.fillText("SPACE OR JUMP TO START", 400, 175);
             }
             if (state.over) {
                 ctx.fillStyle = "rgba(0,0,0,0.8)";
                 ctx.fillRect(0, 0, 800, 350);
                 ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-                ctx.fillText("GAME OVER - PRESS R", 400, 175);
+                ctx.fillText("CRITICAL FAILURE - PRESS R", 400, 175);
             }
         }
 
         window.addEventListener('keydown', e => {
+            unlockAudio();
             if (e.code === 'Space' || e.code === 'ArrowUp') {
                 if (!state.started) state.started = true;
-                if (dino.y >= dino.ground) dino.dy = -13;
+                if (dino.y >= GROUND_Y - 45) dino.dy = -13;
             }
             if (e.code === 'ArrowDown') state.isDucking = true;
             if (e.code === 'KeyR' && state.over) location.reload();
