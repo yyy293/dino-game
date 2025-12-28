@@ -13,9 +13,11 @@
             min-height: 100vh; 
             background: #1a1a2e;
             font-family: 'Courier New', monospace;
+            overflow: hidden;
         }
         canvas { 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            background: #fff;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
         }
     </style>
 </head>
@@ -35,242 +37,172 @@
         let started = false;
         let obstacles = [];
         let frame = 0;
-        let nextSpawn = 400;
-        let particles = [];
-        let trees = [];
+        let nextSpawn = 100;
         let clouds = [];
-        let mountains = 0;
         let dayTime = 0;
-        let biome = 'forest'; 
-        let biomeTimer = 0;
-        
-        let canFly = false;
-        let invincible = false;
-        let flightSpeed = 12;
-        let mph = 0;
-        let keys = { up: false, down: false };
 
-        // Audio Setup
+        // --- AUDIO SETUP ---
         const noice = new Audio('audiotrimmer_adesehy.mp3');
-        noice.volume = 0.5;
         const applause = new Audio('aplausos_2.mp3');
-        applause.volume = 0.5;
         const death = new Audio('directed-by-robert-b_voI2Z4T.mp3');
-        death.volume = 0.5;
-        
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        function beep(freq) {
-            try {
-                const now = audioCtx.currentTime;
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
-                osc.connect(gain);
-                gain.connect(audioCtx.destination);
-                osc.start(now);
-                osc.stop(now + 0.3);
-            } catch(e) {}
+        function playDing() {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+            osc.frequency.value = 880; 
+            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+            osc.start();
+            osc.stop(audioCtx.currentTime + 0.2);
         }
 
         const dino = {
-            x: 50, y: GROUND, w: 44, h: 47,
-            dy: 0, jump: false, leg: 0, targetY: GROUND,
+            x: 50, y: GROUND, w: 40, h: 40,
+            dy: 0, jump: false, leg: 0,
             update() {
-                if (canFly) {
-                    if (keys.up) this.targetY = Math.max(20, this.targetY - flightSpeed);
-                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + flightSpeed);
-                    this.y += (this.targetY - this.y) * 0.4;
+                this.dy += 0.6;
+                this.y += this.dy;
+                if (this.y >= GROUND) {
+                    this.y = GROUND;
                     this.dy = 0;
-                } else {
-                    this.dy += 0.6;
-                    this.y += this.dy;
-                    if (this.y >= GROUND) {
-                        this.y = GROUND;
-                        this.dy = 0;
-                        this.jump = false;
-                    }
+                    this.jump = false;
                 }
-                if (this.y >= GROUND && started && !gameOver && frame % 5 === 0) {
-                    this.leg = 1 - this.leg;
-                }
+                if (frame % 8 === 0) this.leg = 1 - this.leg;
             },
             draw() {
-                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
-                ctx.fillRect(this.x + 20, this.y, 22, 22);
-                ctx.fillRect(this.x + 35, this.y + 10, 7, 12);
-                ctx.fillRect(this.x + 35, this.y + 2, 15, 10);
-                ctx.fillStyle = '#fff';
-                ctx.fillRect(this.x + 45, this.y + 4, 3, 3);
-                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
-                ctx.fillRect(this.x + 10, this.y + 18, 12, 4);
-                ctx.fillRect(this.x, this.y + 16, 12, 4);
+                ctx.fillStyle = '#535353';
+                // Body
+                ctx.fillRect(this.x, this.y, 30, 30);
+                // Head
+                ctx.fillRect(this.x + 20, this.y - 15, 20, 15);
+                // Legs
                 if (this.leg === 0) {
-                    ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
-                    ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x, this.y + 30, 10, 10);
                 } else {
-                    ctx.fillRect(this.x + 22, this.y + 22, 6, 10);
-                    ctx.fillRect(this.x + 28, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 20, this.y + 30, 10, 10);
                 }
             }
         };
 
+        class Cloud {
+            constructor() {
+                this.x = canvas.width + 100;
+                this.y = 30 + Math.random() * 50;
+                this.w = 120; // BIGGER CLOUDS
+            }
+            draw() {
+                ctx.fillStyle = '#d3d3d3';
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 30, 0, Math.PI * 2);
+                ctx.arc(this.x + 35, this.y - 10, 35, 0, Math.PI * 2);
+                ctx.arc(this.x + 70, this.y, 30, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            update() { this.x -= speed * 0.5; }
+        }
+
         class Cactus {
             constructor() {
                 this.x = canvas.width;
-                this.w = 30; this.h = 45;
-                this.y = GROUND + 47 - this.h;
+                this.w = 20;
+                this.h = 40;
+                this.y = GROUND + 40 - this.h;
             }
-            update() { this.x -= speed; }
             draw() {
                 ctx.fillStyle = '#27ae60';
-                ctx.fillRect(this.x + 12, this.y, 10, this.h);
+                ctx.fillRect(this.x, this.y, this.w, this.h);
             }
-            hits(d) {
-                return d.x < this.x + this.w && d.x + d.w > this.x && d.y < this.y + this.h && d.y + d.h > this.y;
+            update() { this.x -= speed; }
+        }
+
+        function handleInput() {
+            if (!started) started = true;
+            if (gameOver) {
+                score = 0; speed = 6; obstacles = []; gameOver = false;
+            } else if (dino.y >= GROUND) {
+                dino.dy = -12;
             }
         }
 
-        class Cloud {
-            constructor(x, y) {
-                this.x = x; this.y = y;
-                this.w = 100; // Bigger clouds
-            }
-            update() { this.x -= speed * 0.2; }
-            draw() {
-                ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx.beginPath();
-                // Scaled up circles for bigger cloud
-                ctx.arc(this.x, this.y, 25, 0, Math.PI * 2);
-                ctx.arc(this.x + 35, this.y, 30, 0, Math.PI * 2);
-                ctx.arc(this.x + 70, this.y, 25, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        class Particle {
-            constructor(x, y) {
-                this.x = x; this.y = y;
-                this.vx = -speed * 0.8; this.vy = (Math.random() - 0.5) * 3;
-                this.life = 25;
-            }
-            update() { this.x += this.vx; this.y += this.vy; this.life--; }
-            draw() {
-                ctx.fillStyle = `rgba(139,115,85,${this.life/25})`;
-                ctx.fillRect(this.x, this.y, 2, 2);
-            }
-        }
-
-        function isDark() { return Math.sin(dayTime) < 0; }
-
-        function drawSky() {
-            const c = Math.sin(dayTime);
-            ctx.fillStyle = c > 0 ? '#87CEEB' : '#0a0a28';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-
-        function drawGround() {
-            ctx.strokeStyle = isDark() ? '#555' : '#654321';
-            ctx.lineWidth = 3;
-            ctx.beginPath();
-            ctx.moveTo(0, GROUND + 47);
-            ctx.lineTo(canvas.width, GROUND + 47);
-            ctx.stroke();
-        }
-
-        function reset() {
-            score = 0; speed = 6; obstacles = []; gameOver = false; started = true;
-            dino.y = GROUND; dino.dy = 0;
-        }
-
-        window.addEventListener('keydown', e => {
-            if (e.code === 'Space') {
-                if (!started) started = true;
-                if (gameOver) reset();
-                else if (dino.y >= GROUND) dino.dy = -11;
-            }
-            if (e.code === 'KeyR') reset();
-            if (e.code === 'ArrowUp') keys.up = true;
-            if (e.code === 'ArrowDown') keys.down = true;
-        });
-        window.addEventListener('keyup', e => {
-            if (e.code === 'ArrowUp') keys.up = false;
-            if (e.code === 'ArrowDown') keys.down = false;
-        });
+        window.addEventListener('keydown', (e) => { if(e.code === 'Space') handleInput(); });
+        canvas.addEventListener('mousedown', handleInput);
 
         function loop() {
-            drawSky();
-            dayTime += 0.002;
-            
-            clouds = clouds.filter(c => {
-                c.update(); c.draw();
-                return c.x > -150;
-            });
-            if (Math.random() > 0.98) clouds.push(new Cloud(canvas.width, 40 + Math.random() * 40));
+            // Background
+            ctx.fillStyle = '#f7f7f7';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            drawGround();
+            // Ground Line
+            ctx.strokeStyle = '#535353';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, GROUND + 40); ctx.lineTo(canvas.width, GROUND + 40); ctx.stroke();
 
-            if (!started) {
-                dino.draw();
-                ctx.fillStyle = "black";
-                ctx.textAlign = "center";
-                ctx.fillText("Press SPACE to Start", canvas.width/2, 100);
-            } else if (gameOver) {
-                dino.draw();
-                obstacles.forEach(o => o.draw());
-                ctx.fillStyle = "red";
-                ctx.textAlign = "center";
-                ctx.font = "bold 30px Courier";
-                ctx.fillText("GAME OVER", canvas.width/2, 80);
-            } else {
-                // Score Logic
+            if (started && !gameOver) {
+                frame++;
+                
+                // Point Earning Logic
                 let oldScore = Math.floor(score);
-                // Slower on ground, faster in air
-                score += (dino.y < GROUND) ? 0.5 : 0.1;
+                // Slower on ground (0.05), Faster in air (0.2)
+                score += (dino.y < GROUND) ? 0.2 : 0.05; 
                 let newScore = Math.floor(score);
 
-                // Audio Trigger Logic
+                // Sound Logic
                 if (newScore > oldScore) {
-                    if (newScore % 10000 === 0) {
-                        noice.currentTime = 0;
-                        noice.play();
-                    } else if (newScore % 1000 === 0) {
-                        applause.currentTime = 0;
-                        applause.play();
-                    } else if (newScore % 100 === 0) {
-                        beep(800); // Synthesized "Ding"
+                    if (newScore % 10000 === 0 && newScore > 0) {
+                        noice.play().catch(()=>{});
+                    } else if (newScore % 1000 === 0 && newScore > 0) {
+                        applause.play().catch(()=>{});
+                    } else if (newScore % 100 === 0 && newScore > 0) {
+                        playDing();
                     }
                 }
 
                 if (speed < 15) speed += 0.001;
 
-                dino.update();
-                dino.draw();
+                // Clouds
+                if (frame % 100 === 0) clouds.push(new Cloud());
+                clouds = clouds.filter(c => {
+                    c.update(); c.draw();
+                    return c.x > -150;
+                });
 
+                // Obstacles
                 nextSpawn--;
                 if (nextSpawn <= 0) {
                     obstacles.push(new Cactus());
-                    nextSpawn = 100 + Math.random() * 100;
+                    nextSpawn = 60 + Math.random() * 100;
                 }
 
                 obstacles = obstacles.filter(o => {
                     o.update(); o.draw();
-                    if (o.hits(dino)) {
+                    if (dino.x < o.x + o.w && dino.x + dino.w > o.x && dino.y < o.y + o.h && dino.y + dino.h > o.y) {
                         gameOver = true;
-                        death.currentTime = 0;
-                        death.play();
-                        if (score > highScore) localStorage.setItem('highScore', Math.floor(score));
+                        death.play().catch(()=>{});
                     }
                     return o.x > -50;
                 });
 
-                ctx.fillStyle = "black";
-                ctx.textAlign = "right";
-                ctx.font = "20px Courier";
-                ctx.fillText(Math.floor(score).toString().padStart(5, '0'), canvas.width - 20, 30);
+                dino.update();
+            }
+
+            dino.draw();
+
+            // UI
+            ctx.fillStyle = '#535353';
+            ctx.font = '20px Courier';
+            ctx.textAlign = 'right';
+            ctx.fillText(Math.floor(score).toString().padStart(5, '0'), canvas.width - 20, 30);
+
+            if (!started) {
+                ctx.textAlign = 'center';
+                ctx.fillText('CLICK TO START', canvas.width/2, canvas.height/2);
+            }
+            if (gameOver) {
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER - CLICK TO RESTART', canvas.width/2, canvas.height/2);
             }
 
             requestAnimationFrame(loop);
