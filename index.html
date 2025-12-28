@@ -101,13 +101,21 @@
                 }
                 
                 ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
+                // Body
                 ctx.fillRect(this.x + 20, this.y, 22, 22);
+                // Neck
                 ctx.fillRect(this.x + 35, this.y + 10, 7, 12);
+                // Head
                 ctx.fillRect(this.x + 35, this.y + 2, 15, 10);
+                // Eye
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(this.x + 45, this.y + 4, 3, 3);
                 ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
+                // Tail
+                ctx.fillRect(this.x + 10, this.y + 18, 12, 4);
+                ctx.fillRect(this.x, this.y + 16, 12, 4);
                 
+                // Legs
                 if (this.leg === 0) {
                     ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
                     ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
@@ -121,6 +129,7 @@
                 if (canFly) {
                     ctx.fillStyle = '#FF8C00';
                     ctx.font = 'bold 16px Courier';
+                    ctx.textAlign = 'left';
                     ctx.fillText('FLIGHT ENABLED!', this.x - 20, this.y - 10);
                 }
             },
@@ -148,9 +157,20 @@
             
             draw() {
                 ctx.fillStyle = '#27ae60';
+                // Main trunk
                 ctx.fillRect(this.x + 12, this.y, 10, this.h);
-                ctx.fillRect(this.x, this.y + 10, 10, 15);
-                ctx.fillRect(this.x + 20, this.y + 15, 10, 15);
+                // Left arm
+                ctx.fillRect(this.x + 4, this.y + 10, 8, 20);
+                ctx.fillRect(this.x + 4, this.y + 10, 4, 25);
+                // Right arm
+                ctx.fillRect(this.x + 22, this.y + 15, 8, 18);
+                ctx.fillRect(this.x + 26, this.y + 15, 4, 22);
+                // Spikes
+                ctx.fillStyle = '#229954';
+                for (let i = 0; i < this.h; i += 8) {
+                    ctx.fillRect(this.x + 10, this.y + i, 2, 4);
+                    ctx.fillRect(this.x + 22, this.y + i + 4, 2, 4);
+                }
             }
             
             hits(d) {
@@ -158,6 +178,57 @@
                        d.x + d.w - 5 > this.x &&
                        d.y < this.y + this.h - 5 &&
                        d.y + d.h - 5 > this.y;
+            }
+        }
+
+        class Ptero {
+            constructor() {
+                this.x = canvas.width;
+                this.w = 46;
+                this.h = 30;
+                this.y = GROUND - 35 - Math.random() * 35;
+            }
+            
+            update() {
+                this.x -= speed;
+            }
+            
+            draw() {
+                const wingUp = Math.floor(frame / 8) % 2 === 0;
+                ctx.fillStyle = '#8B4513';
+                
+                // Body
+                ctx.fillRect(this.x + 10, this.y + 8, 20, 8);
+                // Head
+                ctx.fillRect(this.x + 28, this.y + 6, 8, 8);
+                // Beak
+                ctx.fillStyle = '#DAA520';
+                ctx.fillRect(this.x + 36, this.y + 8, 6, 4);
+                // Eye
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x + 31, this.y + 8, 2, 2);
+                
+                // Wings
+                ctx.fillStyle = '#8B4513';
+                if (wingUp) {
+                    // Wings up
+                    ctx.fillRect(this.x + 12, this.y - 4, 8, 12);
+                    ctx.fillRect(this.x + 20, this.y - 4, 8, 12);
+                } else {
+                    // Wings down
+                    ctx.fillRect(this.x + 12, this.y + 16, 8, 12);
+                    ctx.fillRect(this.x + 20, this.y + 16, 8, 12);
+                }
+                
+                // Tail
+                ctx.fillRect(this.x + 4, this.y + 10, 8, 4);
+            }
+            
+            hits(d) {
+                return d.x < this.x + this.w - 10 &&
+                       d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 10 &&
+                       d.y + d.h - 10 > this.y;
             }
         }
 
