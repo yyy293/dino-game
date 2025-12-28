@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Sonic Pilot</title>
+    <title>Dino Warp: Infinite Loop</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; border-bottom: 6px solid #333; overflow: hidden; }
@@ -14,8 +14,8 @@
 <body>
     <div id="container">
         <div id="gui" onclick="startOrRestart()">
-            <div class="pixel-btn">PILOT ENGAGED</div>
-            <p style="margin-top: 15px;">SPACE to Jump | 3x SPACE to Fly | R to Land</p>
+            <div class="pixel-btn">START PILOT</div>
+            <p style="margin-top: 15px;">SPACE: Jump | 3x SPACE: Fly | DOWN: Duck | R: Land</p>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -30,98 +30,103 @@
         
         const snd = {
             cheer: new Audio(GITHUB_BASE + "aplausos_2.mp3"),
-            credits: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
+            milestone: new Audio(GITHUB_BASE + "audiotrimmer_adesehy.mp3"),
+            lose: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
         };
 
         let state = {
             started: false, over: false, score: 0, speed: 8, frame: 0,
-            jumpCount: 0, isFlying: false, keys: {}, ash: [],
-            skyColor: {r: 135, g: 206, b: 235},
-            played1k: false, played10k: false
+            jumpCount: 0, isFlying: false, keys: {},
+            currentBiome: 0, lastBiomePoint: 0,
+            last1kPlayed: 0, last10kPlayed: 0,
+            skyColor: {r: 135, g: 206, b: 235}
         };
 
-        const dino = { x: 50, y: GROUND_Y - 44, dy: 0 };
-        let obstacles = [], stars = [], clouds = [];
+        const biomes = [
+            {ground: '#e3c9a1', name: 'DESERT', sky: {r:135, g:206, b:235}, heat: true, lava: false, obs: '#2d5a27'},
+            {ground: '#1a1a1a', name: 'VOLCANO', sky: {r:60, g:60, b:70}, heat: true, lava: true, obs: '#ff4500'},
+            {ground: '#2d5a27', name: 'FOREST', sky: {r:20, g:40, b:20}, heat: false, lava: false, obs: '#0d1a0d'}
+        ];
 
-        for(let i=0; i<30; i++) stars.push({x: Math.random()*800, y: Math.random()*250, s: Math.random() + 0.5});
-        for(let i=0; i<4; i++) clouds.push({x: Math.random()*800, y: 40 + Math.random()*60});
-
-        function getAtmosphere() {
-            let cycle = state.score % 2000;
-            if (cycle < 500) return {r:135, g:206, b:235, cloud: '#fff'};
-            if (cycle < 1000) return {r:255, g:120, b:50, cloud: '#fca'};
-            if (cycle < 1500) return {r:15, g:15, b:40, cloud: '#446'};
-            return {r:255, g:180, b:180, cloud: '#fcc'};
-        }
-
-        function getBiome() {
-            let bIndex = Math.floor(state.score / 1500) % 3;
-            if (bIndex === 0) return {ground: '#e3c9a1', name: 'DESERT', heat: true, lava: false};
-            if (bIndex === 1) return {ground: '#222', name: 'VOLCANO', heat: true, lava: true};
-            return {ground: '#2d5a27', name: 'FOREST', heat: false, lava: false};
-        }
+        const dino = { x: 50, y: GROUND_Y - 44, dy: 0, w: 30, h: 44 };
+        let obstacles = [];
 
         function startOrRestart() {
             state.started = true; state.over = false; state.score = 0; state.speed = 8;
-            state.isFlying = false; state.played1k = false; state.played10k = false;
+            state.isFlying = false; state.last1kPlayed = 0; state.last10kPlayed = 0;
+            state.currentBiome = 0; state.lastBiomePoint = 0;
             obstacles = []; dino.y = GROUND_Y-44; dino.dy = 0;
             document.getElementById('gui').style.display = 'none';
         }
 
         function drawPtero(x, y) {
-            let flap = Math.sin(state.frame * 0.3) * 15;
+            let flap = Math.sin(state.frame * 0.4) > 0 ? 18 : -10;
             ctx.fillStyle = "#4a3b37";
-            // Body & Head
-            ctx.fillRect(x + 10, y + 5, 20, 8); 
-            ctx.fillRect(x + 25, y, 8, 8);
-            // Beak
+            ctx.fillRect(x + 10, y + 4, 20, 8); // Body
+            ctx.fillRect(x + 22, y - 6, 6, 12); // Head
             ctx.fillStyle = "#c0392b";
-            ctx.fillRect(x + 33, y + 3, 10, 4);
-            // Detailed Wings
-            ctx.fillStyle = "#4a3b37";
-            ctx.fillRect(x + 12, y + 5 - flap, 6, flap); 
-            ctx.fillRect(x + 12, y + 13, 6, flap);
+            ctx.fillRect(x + 28, y + 2, 14, 4); // Beak
+            ctx.fillStyle = "#5d4a44";
+            ctx.fillRect(x, y + 4 - flap, 12, flap); // Wings
         }
 
         function update() {
             if (!state.started || state.over) return;
             state.frame++; state.score += state.speed / 20;
 
-            // Audio Logic
-            if (state.score >= 1000 && !state.played1k) { snd.cheer.play(); state.played1k = true; }
-            if (state.score >= 10000 && !state.played10k) { snd.credits.play(); state.played10k = true; }
+            let scoreInt = Math.floor(state.score);
+            // Every 10,000 milestone audio
+            if (scoreInt > 0 && scoreInt % 10000 === 0 && scoreInt > state.last10kPlayed) {
+                snd.milestone.play(); state.last10kPlayed = scoreInt;
+            }
+            // Every 1,000 milestone audio (skip if 10k is playing)
+            else if (scoreInt > 0 && scoreInt % 1000 === 0 && scoreInt > state.last1kPlayed) {
+                snd.cheer.play(); state.last1kPlayed = scoreInt;
+            }
 
-            let atm = getAtmosphere();
-            let biome = getBiome();
+            if (Math.floor(state.score / 1000) > state.lastBiomePoint) {
+                state.currentBiome = Math.floor(Math.random() * biomes.length);
+                state.lastBiomePoint = Math.floor(state.score / 1000);
+            }
 
-            state.skyColor.r += (atm.r - state.skyColor.r) * 0.05;
-            state.skyColor.g += (atm.g - state.skyColor.g) * 0.05;
-            state.skyColor.b += (atm.b - state.skyColor.b) * 0.05;
+            let biome = biomes[state.currentBiome];
+            state.skyColor.r += (biome.sky.r - state.skyColor.r) * 0.05;
+            state.skyColor.g += (biome.sky.g - state.skyColor.g) * 0.05;
+            state.skyColor.b += (biome.sky.b - state.skyColor.b) * 0.05;
+
+            // Ducking
+            if (state.keys['ArrowDown'] && !state.isFlying) {
+                dino.h = 24; 
+                if (dino.y >= GROUND_Y - 44) dino.y = GROUND_Y - 24;
+            } else {
+                dino.h = 44;
+            }
 
             if (state.isFlying) {
-                if (state.keys['ArrowUp']) dino.dy = -12;
-                else if (state.keys['ArrowDown']) dino.dy = 12;
-                else dino.dy *= 0.9; 
+                if (state.keys['ArrowUp']) dino.dy = -10;
+                else if (state.keys['ArrowDown']) dino.dy = 10;
+                else dino.dy *= 0.9;
                 dino.y += dino.dy;
             } else {
                 dino.dy += 0.8; dino.y += dino.dy;
             }
 
-            if (dino.y > GROUND_Y - 44) { dino.y = GROUND_Y-44; dino.dy = 0; state.isFlying = false; state.jumpCount = 0; }
+            if (dino.y > GROUND_Y - dino.h) { dino.y = GROUND_Y - dino.h; dino.dy = 0; }
             if (dino.y < 10) dino.y = 10;
 
             state.speed += 0.002;
-            stars.forEach(s => { s.x -= state.speed * s.s; if(s.x < -100) s.x = 850; });
 
-            if (state.frame % Math.max(20, Math.floor(400/state.speed)) === 0) {
-                let isBird = Math.random() > 0.5;
-                obstacles.push({x: 850, y: isBird ? GROUND_Y - 140 : GROUND_Y - 40, w: 40, h: 40, type: isBird ? 'bird' : 'cactus'});
+            if (state.frame % Math.max(25, Math.floor(500/state.speed)) === 0) {
+                let isBird = Math.random() > 0.4;
+                let birdH = [GROUND_Y-40, GROUND_Y-90, GROUND_Y-130][Math.floor(Math.random()*3)];
+                obstacles.push({x: 850, y: isBird ? birdH : GROUND_Y-40, w: 35, h: isBird ? 20 : 40, type: isBird ? 'bird' : 'cactus'});
             }
 
             obstacles.forEach(o => {
                 o.x -= state.speed;
-                if (dino.x < o.x + o.w && dino.x + 30 > o.x && dino.y < o.y + o.h && dino.y + 40 > o.y) {
+                if (dino.x < o.x + o.w && dino.x + 30 > o.x && dino.y < o.y + o.h && dino.y + dino.h > o.y) {
                     state.over = true;
+                    snd.lose.play();
                     document.getElementById('gui').style.display = 'flex';
                 }
             });
@@ -129,39 +134,36 @@
         }
 
         function draw() {
-            let biome = getBiome();
-            let atm = getAtmosphere();
+            let biome = biomes[state.currentBiome];
             ctx.save();
             if (biome.heat) ctx.translate(Math.sin(state.frame*0.1)*2, 0);
 
             ctx.fillStyle = `rgb(${state.skyColor.r},${state.skyColor.g},${state.skyColor.b})`;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Background
-            ctx.fillStyle = "#fff"; stars.forEach(s => ctx.fillRect(s.x, s.y, 2, 2));
-            ctx.fillStyle = biome.ground; ctx.fillRect(0, GROUND_Y, 800, 40);
-            
-            // Lava Cracks
+            ctx.fillStyle = "#FFD700";
+            ctx.beginPath(); ctx.arc(700, 60, 25, 0, Math.PI*2); ctx.fill();
+
+            ctx.fillStyle = biome.ground;
+            ctx.fillRect(0, GROUND_Y, 800, 40);
             if (biome.lava) {
                 ctx.fillStyle = "#ff4500";
-                for(let i=0; i<800; i+=100) ctx.fillRect(i - (state.frame*2 % 100), GROUND_Y+15, 40, 4);
+                for(let i=0; i<800; i+=100) ctx.fillRect(i - (state.frame*3 % 100), GROUND_Y+12, 40, 4);
             }
 
-            // Dino
             ctx.fillStyle = "#548d44";
-            ctx.fillRect(dino.x+10, dino.y, 20, 40);
+            ctx.fillRect(dino.x, dino.y, 30, dino.h);
+            ctx.fillStyle = "#fff"; ctx.fillRect(dino.x+22, dino.y+4, 4, 4);
 
-            // Obstacles
             obstacles.forEach(o => {
                 if(o.type==='bird') drawPtero(o.x, o.y);
-                else { ctx.fillStyle="#2d5a27"; ctx.fillRect(o.x+15, o.y, 10, 40); }
+                else { ctx.fillStyle = biome.obs; ctx.fillRect(o.x+12, o.y, 10, 40); ctx.fillRect(o.x, o.y+10, 35, 8); }
             });
-
             ctx.restore();
 
             if (state.isFlying) {
-                ctx.fillStyle = "#ff8c00"; ctx.font = "bold 24px Courier New";
-                ctx.textAlign = "center"; ctx.fillText("FLIGHT ENABLED!", 400, 60);
+                ctx.fillStyle = "#ff8c00"; ctx.font = "bold 20px Courier New";
+                ctx.textAlign = "center"; ctx.fillText("PILOT ACTIVATED", 400, 50);
             }
 
             ctx.fillStyle = "#fff"; ctx.font = "bold 14px Courier New";
@@ -177,14 +179,10 @@
                 if (!state.isFlying) {
                     state.jumpCount++;
                     if (state.jumpCount >= 3) state.isFlying = true;
-                    else dino.dy = -14;
+                    else if (dino.y >= GROUND_Y - 44) dino.dy = -14;
                 }
             }
-            if (e.code === 'KeyR') { 
-                state.isFlying = false; 
-                state.jumpCount = 0; 
-                dino.dy = 5; // Force fall
-            }
+            if (e.code === 'KeyR') { state.isFlying = false; state.jumpCount = 0; dino.dy = 10; }
         });
         window.addEventListener('keyup', e => state.keys[e.code] = false);
         loop();
