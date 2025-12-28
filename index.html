@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Pixel Pilot</title>
+    <title>Dino Warp: Sonic Pilot</title>
     <style>
         body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
         #container { position: relative; width: 800px; height: 350px; border-bottom: 6px solid #333; overflow: hidden; }
@@ -14,8 +14,8 @@
 <body>
     <div id="container">
         <div id="gui" onclick="startOrRestart()">
-            <div class="pixel-btn">ENGAGE WARP</div>
-            <p style="margin-top: 15px;">SPACE to Jump | ??? to Pilot | R to Reset</p>
+            <div class="pixel-btn">PILOT ENGAGED</div>
+            <p style="margin-top: 15px;">SPACE to Jump | 3x SPACE to Fly | R to Land</p>
         </div>
         <canvas id="gameCanvas"></canvas>
     </div>
@@ -26,12 +26,18 @@
         canvas.width = 800; canvas.height = 350;
 
         const GROUND_Y = 310;
-        let highscore = localStorage.getItem('dinoHiScore') || 0;
+        const GITHUB_BASE = "https://raw.githubusercontent.com/yyy293/dino-game/main/";
+        
+        const snd = {
+            cheer: new Audio(GITHUB_BASE + "aplausos_2.mp3"),
+            credits: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
+        };
 
         let state = {
             started: false, over: false, score: 0, speed: 8, frame: 0,
             jumpCount: 0, isFlying: false, keys: {}, ash: [],
-            skyColor: {r: 135, g: 206, b: 235}
+            skyColor: {r: 135, g: 206, b: 235},
+            played1k: false, played10k: false
         };
 
         const dino = { x: 50, y: GROUND_Y - 44, dy: 0 };
@@ -42,45 +48,48 @@
 
         function getAtmosphere() {
             let cycle = state.score % 2000;
-            if (cycle < 500) return {name: 'Day', r:135, g:206, b:235, cloud: '#fff'};
-            if (cycle < 1000) return {name: 'Sunset', r:255, g:120, b:50, cloud: '#fca'};
-            if (cycle < 1500) return {name: 'Night', r:15, g:15, b:40, cloud: '#446'};
-            return {name: 'Sunrise', r:255, g:180, b:180, cloud: '#fcc'};
+            if (cycle < 500) return {r:135, g:206, b:235, cloud: '#fff'};
+            if (cycle < 1000) return {r:255, g:120, b:50, cloud: '#fca'};
+            if (cycle < 1500) return {r:15, g:15, b:40, cloud: '#446'};
+            return {r:255, g:180, b:180, cloud: '#fcc'};
         }
 
         function getBiome() {
             let bIndex = Math.floor(state.score / 1500) % 3;
-            if (bIndex === 0) return {ground: '#e3c9a1', name: 'DESERT', heat: true, shake: 0, lava: false};
-            if (bIndex === 1) return {ground: '#222', name: 'VOLCANO', heat: true, shake: 2, lava: true};
-            return {ground: '#2d5a27', name: 'FOREST', heat: false, shake: 0, lava: false};
+            if (bIndex === 0) return {ground: '#e3c9a1', name: 'DESERT', heat: true, lava: false};
+            if (bIndex === 1) return {ground: '#222', name: 'VOLCANO', heat: true, lava: true};
+            return {ground: '#2d5a27', name: 'FOREST', heat: false, lava: false};
         }
 
         function startOrRestart() {
             state.started = true; state.over = false; state.score = 0; state.speed = 8;
-            state.isFlying = false; state.ash = []; obstacles = []; 
-            dino.y = GROUND_Y-44; dino.dy = 0;
+            state.isFlying = false; state.played1k = false; state.played10k = false;
+            obstacles = []; dino.y = GROUND_Y-44; dino.dy = 0;
             document.getElementById('gui').style.display = 'none';
         }
 
-        function drawPixelDino(x, y) {
-            ctx.fillStyle = "#548d44";
-            ctx.fillRect(x+16, y, 20, 16); // Head
-            ctx.fillRect(x+8, y+16, 24, 20); // Body
-            ctx.fillRect(x, y+20, 8, 8); // Tail
-            ctx.fillStyle = "#fff"; ctx.fillRect(x+28, y+4, 4, 4); 
-            let move = state.isFlying ? Math.sin(state.frame*0.5)*5 : (Math.floor(state.frame/5)%2*5);
-            ctx.fillStyle = "#2d4d25";
-            ctx.fillRect(x+10, y+36+move, 6, 8); ctx.fillRect(x+22, y+36-move, 6, 8);
+        function drawPtero(x, y) {
+            let flap = Math.sin(state.frame * 0.3) * 15;
+            ctx.fillStyle = "#4a3b37";
+            // Body & Head
+            ctx.fillRect(x + 10, y + 5, 20, 8); 
+            ctx.fillRect(x + 25, y, 8, 8);
+            // Beak
+            ctx.fillStyle = "#c0392b";
+            ctx.fillRect(x + 33, y + 3, 10, 4);
+            // Detailed Wings
+            ctx.fillStyle = "#4a3b37";
+            ctx.fillRect(x + 12, y + 5 - flap, 6, flap); 
+            ctx.fillRect(x + 12, y + 13, 6, flap);
         }
 
         function update() {
             if (!state.started || state.over) return;
             state.frame++; state.score += state.speed / 20;
-            
-            if(state.score > highscore) {
-                highscore = Math.floor(state.score);
-                localStorage.setItem('dinoHiScore', highscore);
-            }
+
+            // Audio Logic
+            if (state.score >= 1000 && !state.played1k) { snd.cheer.play(); state.played1k = true; }
+            if (state.score >= 10000 && !state.played10k) { snd.credits.play(); state.played10k = true; }
 
             let atm = getAtmosphere();
             let biome = getBiome();
@@ -89,15 +98,11 @@
             state.skyColor.g += (atm.g - state.skyColor.g) * 0.05;
             state.skyColor.b += (atm.b - state.skyColor.b) * 0.05;
 
-            if (biome.name === 'VOLCANO' && state.frame % 3 === 0) {
-                state.ash.push({x: 820, y: Math.random()*300, vx: -state.speed - 2, vy: 1});
-            }
-            state.ash.forEach(a => { a.x += a.vx; a.y += a.vy; });
-            state.ash = state.ash.filter(a => a.x > -10);
-
             if (state.isFlying) {
-                if (state.keys['ArrowUp']) dino.y -= 7;
-                if (state.keys['ArrowDown']) dino.y += 7;
+                if (state.keys['ArrowUp']) dino.dy = -12;
+                else if (state.keys['ArrowDown']) dino.dy = 12;
+                else dino.dy *= 0.9; 
+                dino.y += dino.dy;
             } else {
                 dino.dy += 0.8; dino.y += dino.dy;
             }
@@ -107,11 +112,10 @@
 
             state.speed += 0.002;
             stars.forEach(s => { s.x -= state.speed * s.s; if(s.x < -100) s.x = 850; });
-            clouds.forEach(c => { c.x -= state.speed * 0.2; if(c.x < -100) c.x = 850; });
 
             if (state.frame % Math.max(20, Math.floor(400/state.speed)) === 0) {
                 let isBird = Math.random() > 0.5;
-                obstacles.push({x: 850, y: isBird ? GROUND_Y - 140 : GROUND_Y - 40, w: 35, h: 40, type: isBird ? 'bird' : 'cactus'});
+                obstacles.push({x: 850, y: isBird ? GROUND_Y - 140 : GROUND_Y - 40, w: 40, h: 40, type: isBird ? 'bird' : 'cactus'});
             }
 
             obstacles.forEach(o => {
@@ -127,49 +131,42 @@
         function draw() {
             let biome = getBiome();
             let atm = getAtmosphere();
-
             ctx.save();
-            let shake = biome.shake > 0 ? (Math.random()-0.5)*biome.shake : 0;
-            let rip = biome.heat ? Math.sin(state.frame*0.1)*2 : 0;
-            ctx.translate(shake + rip, shake);
+            if (biome.heat) ctx.translate(Math.sin(state.frame*0.1)*2, 0);
 
             ctx.fillStyle = `rgb(${state.skyColor.r},${state.skyColor.g},${state.skyColor.b})`;
-            ctx.fillRect(-20, -20, canvas.width+40, canvas.height+40);
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Background Elements
-            ctx.fillStyle = (atm.name === 'Night') ? "#fff" : "#FFD700";
-            ctx.beginPath(); ctx.arc(700, 60, 25, 0, Math.PI*2); ctx.fill();
-            ctx.fillStyle = "#fff"; stars.forEach(s => { ctx.fillRect(s.x, s.y, 2, 2); });
-            ctx.fillStyle = atm.cloud; clouds.forEach(c => { ctx.fillRect(c.x, c.y, 40, 12); ctx.fillRect(c.x+8, c.y-8, 24, 8); });
-
-            // Ground & Lava
-            ctx.fillStyle = biome.ground;
-            ctx.fillRect(-20, GROUND_Y, 840, 40);
+            // Background
+            ctx.fillStyle = "#fff"; stars.forEach(s => ctx.fillRect(s.x, s.y, 2, 2));
+            ctx.fillStyle = biome.ground; ctx.fillRect(0, GROUND_Y, 800, 40);
+            
+            // Lava Cracks
             if (biome.lava) {
                 ctx.fillStyle = "#ff4500";
-                for(let i=0; i<900; i+=80) {
-                    let moveX = (state.frame * state.speed) % 80;
-                    ctx.fillRect(i - moveX, GROUND_Y + 12, 40, 4);
-                }
+                for(let i=0; i<800; i+=100) ctx.fillRect(i - (state.frame*2 % 100), GROUND_Y+15, 40, 4);
             }
 
-            state.ash.forEach(a => { ctx.fillStyle="#555"; ctx.fillRect(a.x, a.y, 4, 4); });
-            drawPixelDino(dino.x, dino.y);
-            obstacles.forEach(o => { 
-                ctx.fillStyle = biome.obs || "#444";
-                if(o.type==='cactus') { ctx.fillRect(o.x+10, o.y, 10, 40); ctx.fillRect(o.x, o.y+15, 30, 8); }
-                else { ctx.fillStyle="#704214"; ctx.fillRect(o.x, o.y, 40, 10); ctx.fillRect(o.x+15, o.y-10, 8, 20); }
+            // Dino
+            ctx.fillStyle = "#548d44";
+            ctx.fillRect(dino.x+10, dino.y, 20, 40);
+
+            // Obstacles
+            obstacles.forEach(o => {
+                if(o.type==='bird') drawPtero(o.x, o.y);
+                else { ctx.fillStyle="#2d5a27"; ctx.fillRect(o.x+15, o.y, 10, 40); }
             });
 
             ctx.restore();
 
             if (state.isFlying) {
                 ctx.fillStyle = "#ff8c00"; ctx.font = "bold 24px Courier New";
-                ctx.textAlign = "center"; ctx.fillText("FLIGHT ENABLED!", 400, 60); ctx.textAlign = "left";
+                ctx.textAlign = "center"; ctx.fillText("FLIGHT ENABLED!", 400, 60);
             }
 
             ctx.fillStyle = "#fff"; ctx.font = "bold 14px Courier New";
-            ctx.fillText(`${biome.name} | HI: ${highscore} | SCORE: ${Math.floor(state.score)}`, 20, 340);
+            ctx.textAlign = "left";
+            ctx.fillText(`${biome.name} | SCORE: ${Math.floor(state.score)}`, 20, 30);
         }
 
         function loop() { update(); draw(); requestAnimationFrame(loop); }
@@ -183,9 +180,13 @@
                     else dino.dy = -14;
                 }
             }
-            if (e.code === 'KeyR') { state.isFlying = false; state.jumpCount = 0; }
+            if (e.code === 'KeyR') { 
+                state.isFlying = false; 
+                state.jumpCount = 0; 
+                dino.dy = 5; // Force fall
+            }
         });
-        window.addEventListener('keyup', e => { state.keys[e.code] = false; });
+        window.addEventListener('keyup', e => state.keys[e.code] = false);
         loop();
     </script>
 </body>
