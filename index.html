@@ -3,28 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game - Horizon Sink</title>
+    <title>Dino Water World</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             display: flex; flex-direction: column; justify-content: center; align-items: center; 
             min-height: 100vh; font-family: 'Courier New', Courier, monospace; 
-            overflow: hidden; touch-action: none; background-color: #f7f7f7;
+            overflow: hidden; touch-action: none;
         }
         #container { 
-            position: relative; width: 800px; height: 200px; 
+            position: relative; width: 800px; height: 300px; 
             background-color: transparent; overflow: hidden;
         }
         canvas { display: block; width: 100%; height: 100%; }
-        /* This line represents the ground visually */
-        .ground-line {
-            position: absolute; bottom: 48px; width: 800px; height: 2px; background-color: #535353;
-        }
     </style>
 </head>
 <body id="gameBody">
     <div id="container">
-        <div class="ground-line" id="floorLine"></div>
         <canvas id="gameCanvas"></canvas>
     </div>
 
@@ -32,7 +27,7 @@
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         canvas.width = 800;
-        canvas.height = 200;
+        canvas.height = 300;
 
         const dinoImg = new Image();
         dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
@@ -45,24 +40,25 @@
         let milestones = { m100: false, m1k: false, m10k: false };
 
         function playDing() {
-            const actx = new (window.AudioContext || window.webkitAudioContext)();
-            const osc = actx.createOscillator();
-            const gain = actx.createGain();
-            osc.connect(gain); gain.connect(actx.destination);
-            osc.frequency.value = 880;
-            gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.5);
-            osc.start(); osc.stop(actx.currentTime + 0.5);
+            try {
+                const actx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = actx.createOscillator();
+                const gain = actx.createGain();
+                osc.connect(gain); gain.connect(actx.destination);
+                osc.frequency.value = 880;
+                gain.gain.exponentialRampToValueAtTime(0.0001, actx.currentTime + 0.5);
+                osc.start(); osc.stop(actx.currentTime + 0.5);
+            } catch(e) {}
         }
 
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
-        const GROUND_Y = 150;
+        const GROUND_Y = 200;
         let gameSpeed = 4; 
         let score = 0;
         let isGameOver = false;
         let gameStarted = false;
         let obstacles = [];
-        let clouds = [];
         let stars = [];
         let frameCount = 0;
         
@@ -72,77 +68,63 @@
         let spaceCount = 0;
         let lastSpaceTime = 0;
 
-        for(let i=0; i<40; i++) {
-            stars.push({ x: Math.random() * canvas.width, y: Math.random() * 110, size: Math.random() * 2, blinkOffset: Math.random() * Math.PI });
-        }
-
-        class Cloud {
-            constructor() {
-                this.x = canvas.width + 50;
-                this.y = 20 + Math.random() * 60;
-                this.speed = 0.5 + Math.random();
-            }
-            draw(cycle) {
-                let r = 211, g = 211, b = 211;
-                if (cycle > 0.3 && cycle < 0.7) { r = 255; g = 180; b = 130; } 
-                else if (cycle >= 0.7) { r = 60; g = 60; b = 75; }
-                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, 10, 0, Math.PI * 2);
-                ctx.arc(this.x + 10, this.y - 5, 12, 0, Math.PI * 2);
-                ctx.arc(this.x + 25, this.y, 10, 0, Math.PI * 2);
-                ctx.fill();
-                this.x -= this.speed;
-            }
+        for(let i=0; i<50; i++) {
+            stars.push({ x: Math.random() * canvas.width, y: Math.random() * 140, size: Math.random() * 2 });
         }
 
         function getSkyColor(cycle) {
-            const r = Math.floor(247 - (cycle * (247 - 32)));
-            const g = Math.floor(247 - (cycle * (247 - 33)));
-            const b = Math.floor(247 - (cycle * (247 - 36)));
+            const r = Math.floor(247 - (cycle * (247 - 20)));
+            const g = Math.floor(247 - (cycle * (247 - 20)));
+            const b = Math.floor(247 - (cycle * (247 - 40)));
             return `rgb(${r}, ${g}, ${b})`;
         }
 
-        function drawCelestialLayer(cycle) {
-            // Stars
-            let starAlpha = Math.max(0, (cycle - 0.4) / 0.4);
-            if (starAlpha > 0) {
+        function drawEnvironment(cycle) {
+            // cycle: 0 = day, 1 = night
+            const angle = (cycle * Math.PI) + Math.PI; 
+            const sunX = 400 + Math.cos(angle) * 380;
+            const sunY = 220 + Math.sin(angle) * 180; 
+            const moonX = 400 + Math.cos(angle + Math.PI) * 380;
+            const moonY = 220 + Math.sin(angle + Math.PI) * 180;
+
+            // Stars fade in
+            if (cycle > 0.4) {
+                ctx.globalAlpha = (cycle - 0.4) * 1.6;
                 ctx.fillStyle = "white";
-                stars.forEach(s => {
-                    ctx.globalAlpha = starAlpha * (0.5 + Math.abs(Math.sin(frameCount / 20 + s.blinkOffset)) * 0.5);
-                    ctx.fillRect(s.x, s.y, s.size, s.size);
-                    s.x -= 0.05; if (s.x < 0) s.x = canvas.width;
-                });
+                stars.forEach(s => ctx.fillRect(s.x, s.y, s.size, s.size));
                 ctx.globalAlpha = 1.0;
             }
 
-            // Calculations for Sun/Moon "Sinking"
-            // We use 180 as the horizon vertical point in the canvas
-            const angle = (cycle * Math.PI) + Math.PI; 
-            const sunX = 400 + Math.cos(angle) * 380;
-            const sunY = 185 + Math.sin(angle) * 160; 
-            const moonX = 400 + Math.cos(angle + Math.PI) * 380;
-            const moonY = 185 + Math.sin(angle + Math.PI) * 160;
-
-            // Sunset Glow (Drawn before the sun to look like atmosphere)
-            if (cycle > 0.2 && cycle < 0.8) {
-                let glowFactor = Math.sin(cycle * Math.PI);
-                let glowGrad = ctx.createRadialGradient(sunX, sunY, 5, sunX, sunY, 40 + (glowFactor * 120));
-                glowGrad.addColorStop(0, `rgba(255, 100, 0, ${glowFactor * 0.6})`);
-                glowGrad.addColorStop(1, `rgba(255, 50, 0, 0)`);
-                ctx.fillStyle = glowGrad;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-            }
-
-            // Draw Sun
+            // Draw Sun & Moon
             ctx.fillStyle = "#FFD700";
-            ctx.beginPath(); ctx.arc(sunX, sunY, 22, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(sunX, sunY, 25, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#EEE";
+            ctx.beginPath(); ctx.arc(moonX, moonY, 22, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = getSkyColor(cycle); // Moon crater cutout
+            ctx.beginPath(); ctx.arc(moonX + 10, moonY - 5, 20, 0, Math.PI * 2); ctx.fill();
 
-            // Draw Moon
-            ctx.fillStyle = "#DDD";
-            ctx.beginPath(); ctx.arc(moonX, moonY, 18, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = getSkyColor(cycle);
-            ctx.beginPath(); ctx.arc(moonX + 8, moonY - 5, 16, 0, Math.PI * 2); ctx.fill();
+            // Ground Line
+            ctx.strokeStyle = cycle > 0.6 ? "#DDD" : "#535353";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, GROUND_Y + 45); ctx.lineTo(canvas.width, GROUND_Y + 45); ctx.stroke();
+
+            // SHIMMERING REFLECTIONS
+            const shimmer = Math.sin(frameCount / 10) * 5;
+            ctx.globalAlpha = 0.25;
+            
+            // Sun Reflection
+            ctx.fillStyle = "#FFD700";
+            ctx.beginPath(); 
+            ctx.ellipse(sunX + shimmer, GROUND_Y + 70, 30 + shimmer, 8, 0, 0, Math.PI * 2); 
+            ctx.fill();
+
+            // Moon Reflection
+            ctx.fillStyle = "#EEE";
+            ctx.beginPath(); 
+            ctx.ellipse(moonX - shimmer, GROUND_Y + 70, 25 + shimmer, 6, 0, 0, Math.PI * 2); 
+            ctx.fill();
+            
+            ctx.globalAlpha = 1.0;
         }
 
         const dino = {
@@ -153,11 +135,11 @@
                     this.y += this.dy;
                     if (this.y > GROUND_Y) { this.y = GROUND_Y; this.dy = 0; }
                 }
-                let drawH = isDucking ? 25 : 40;
-                let drawY = isDucking ? this.y + 15 : this.y;
+                let drawH = isDucking ? 25 : 45;
+                let drawY = isDucking ? this.y + 20 : this.y;
                 if (dinoImg.complete) {
                     if (isNight) ctx.filter = 'invert(1)';
-                    ctx.drawImage(dinoImg, this.x, drawY, 40, drawH);
+                    ctx.drawImage(dinoImg, this.x, drawY, 45, drawH);
                     ctx.filter = 'none';
                 }
             }
@@ -167,10 +149,10 @@
             constructor(type) {
                 this.type = type;
                 this.x = canvas.width;
-                if (type === 'cactus') { this.width = 25; this.height = 40; this.y = GROUND_Y; }
+                if (type === 'cactus') { this.width = 30; this.height = 45; this.y = GROUND_Y; }
                 else { 
-                    this.width = 30; this.height = 15;
-                    this.y = [GROUND_Y - 55, GROUND_Y - 25, GROUND_Y + 5][Math.floor(Math.random() * 3)];
+                    this.width = 40; this.height = 15;
+                    this.y = [GROUND_Y - 70, GROUND_Y - 30, GROUND_Y + 10][Math.floor(Math.random() * 3)];
                 }
             }
             update(isNight) {
@@ -181,9 +163,9 @@
                     ctx.filter = 'none';
                 } else if (this.type === 'bird') {
                     ctx.fillStyle = isNight ? "#DDD" : "#535353";
-                    ctx.fillRect(this.x, this.y, 25, 8);
-                    let wing = Math.floor(frameCount / 10) % 2;
-                    ctx.fillRect(this.x + 5, (wing === 0 ? this.y - 12 : this.y + 8), 8, 12);
+                    ctx.fillRect(this.x, this.y, this.width, 10);
+                    let wing = Math.floor(frameCount / 8) % 2;
+                    ctx.fillRect(this.x + 8, (wing === 0 ? this.y - 15 : this.y + 10), 12, 12);
                 }
             }
         }
@@ -191,54 +173,46 @@
         function animate() {
             if (isGameOver) return;
             frameCount++;
-            score += 0.15;
-            let s = Math.floor(score);
-            let cycle = (Math.sin(score / 500) + 1) / 2; 
-            let isNight = cycle > 0.7;
-
-            // Change Colors
-            document.body.style.backgroundColor = getSkyColor(cycle);
-            document.getElementById('floorLine').style.backgroundColor = isNight ? "#DDD" : "#535353";
             
+            score += canFly ? 2.5 : 0.15;
+            let s = Math.floor(score);
+
+            // Corrected Cycle: 1000 point full loop (500 day, 500 night)
+            let cycle = (Math.sin((score / 500) * Math.PI - (Math.PI / 2)) + 1) / 2;
+            let isNight = cycle > 0.6;
+
+            document.body.style.backgroundColor = getSkyColor(cycle);
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            // 1. SKY & CELESTIALS (Drawn First - Back Layer)
-            drawCelestialLayer(cycle);
+            drawEnvironment(cycle);
 
-            // 2. CLOUDS
-            if (frameCount % 150 === 0) clouds.push(new Cloud());
-            clouds = clouds.filter(c => { c.draw(cycle); return c.x > -100; });
-
-            // 3. AUDIO TRIGGERS
             if (s >= 100 && !milestones.m100) { playDing(); milestones.m100 = true; }
             if (s >= 1000 && !milestones.m1k) { snd1k.play(); milestones.m1k = true; }
             if (s >= 10000 && !milestones.m10k) { snd10k.play(); milestones.m10k = true; }
 
-            gameSpeed += 0.0008;
-            if (frameCount % 120 === 0) obstacles.push(new Obstacle((score > 400 && Math.random() > 0.6) ? 'bird' : 'cactus'));
+            gameSpeed += 0.0012;
+            if (frameCount % 90 === 0) obstacles.push(new Obstacle(Math.random() > 0.7 ? 'bird' : 'cactus'));
 
-            // 4. DINO & OBSTACLES (Drawn Last - Front Layer)
             dino.update(isNight);
             obstacles = obstacles.filter(obs => {
                 obs.update(isNight);
-                let hitY = isDucking ? dino.y + 15 : dino.y;
-                let hitH = isDucking ? 25 : 40;
-                if (!isInvincible && dino.x < obs.x + obs.width && dino.x + 30 > obs.x && hitY < obs.y + obs.height && hitY + hitH > obs.y) {
+                let hitY = isDucking ? dino.y + 20 : dino.y;
+                if (!isInvincible && dino.x < obs.x + obs.width && dino.x + 40 > obs.x && hitY < obs.y + obs.height && hitY + 45 > obs.y) {
                     isGameOver = true;
                     sndGameOver.play();
                 }
                 return obs.x > -50;
             });
 
-            // 5. HUD
             ctx.fillStyle = isNight ? "#DDD" : "#535353";
-            ctx.font = "20px Courier New";
+            ctx.font = "bold 20px Courier New";
             ctx.textAlign = "right";
-            ctx.fillText(s.toString().padStart(5, '0'), canvas.width - 20, 30);
+            ctx.fillText(s.toString().padStart(6, '0'), canvas.width - 20, 40);
+            if (canFly) ctx.fillText("SUPER FLIGHT!", canvas.width - 20, 70);
             
             if (isGameOver) {
                 ctx.textAlign = "center";
-                ctx.fillText("GAME OVER - PRESS R", canvas.width / 2, 80);
+                ctx.fillText("GAME OVER - PRESS R TO RESTART", canvas.width / 2, 120);
             } else {
                 requestAnimationFrame(animate);
             }
@@ -247,7 +221,8 @@
         window.addEventListener('keydown', e => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
                 if (!gameStarted) { gameStarted = true; animate(); }
-                if (dino.y >= GROUND_Y && !isDucking) dino.dy = JUMP_FORCE;
+                if (!canFly && dino.y >= GROUND_Y && !isDucking) dino.dy = JUMP_FORCE;
+                
                 if (e.code === 'Space') {
                     let now = Date.now();
                     if (now - lastSpaceTime < 300) spaceCount++; else spaceCount = 1;
@@ -257,16 +232,18 @@
             }
             if (e.code === 'ArrowDown') isDucking = true;
             if (e.code === 'KeyR') window.location.reload();
+
             if (canFly) {
                 if (e.code === 'ArrowUp') dino.y -= 25;
                 if (e.code === 'ArrowDown') dino.y += 25;
             }
         });
+
         window.addEventListener('keyup', e => { if (e.code === 'ArrowDown') isDucking = false; });
         
         ctx.fillStyle = "#535353"; ctx.textAlign = "center";
         ctx.font = "20px Courier New";
-        ctx.fillText("SPACE TO START", canvas.width / 2, 80);
+        ctx.fillText("TRIPLE SPACE TO ACTIVATE SUPER FLIGHT", canvas.width / 2, 150);
     </script>
 </body>
 </html>
