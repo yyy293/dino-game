@@ -2,191 +2,746 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Audio Fixed</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Dino Game</title>
     <style>
-        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #container { position: relative; width: 800px; height: 350px; border-bottom: 6px solid #333; overflow: hidden; }
-        canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-        #gui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.9); z-index: 20; cursor: pointer; color: white; text-align: center; }
-        .pixel-btn { background: #548d44; padding: 15px 30px; border: 4px solid #fff; font-weight: bold; font-size: 24px; box-shadow: 4px 4px #000; cursor: pointer; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body { 
+            display: flex;
+            flex-direction: column;
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            background: #1a1a2e;
+            font-family: 'Courier New', Courier, monospace; 
+            overflow: hidden; 
+            touch-action: none; 
+        }
+        #container { 
+            position: relative; 
+            width: 800px; 
+            height: 200px; 
+            background: #87CEEB;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        canvas { 
+            display: block; 
+            width: 100%;
+            height: 100%;
+        }
     </style>
 </head>
 <body>
     <div id="container">
-        <div id="gui" onclick="startOrRestart()">
-            <div class="pixel-btn">CLICK TO START & UNMUTE</div>
-            <p style="margin-top: 15px;">SPACE: Jump | DOWN: Duck | R: Land</p>
-        </div>
         <canvas id="gameCanvas"></canvas>
     </div>
-
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        canvas.width = 800; canvas.height = 350;
+        canvas.width = 800;
+        canvas.height = 200;
 
-        const GROUND_Y = 310;
-        const GITHUB_BASE = "https://raw.githubusercontent.com/yyy293/dino-game/main/";
-        
-        // AUDIO ENGINE
-        const snd = {
-            cheer: new Audio(GITHUB_BASE + "aplausos_2.mp3"),
-            milestone: new Audio(GITHUB_BASE + "audiotrimmer_adesehy.mp3"),
-            lose: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
-        };
+        // Game constants
+        const GRAVITY = 0.6;
+        const JUMP_FORCE = -11;
+        const GROUND_Y = 150;
+        const INITIAL_SPEED = 6;
+        const SPEED_INCREMENT = 0.002;
+        const MAX_SPEED = 14;
+        const OBSTACLE_MIN_DISTANCE = 350;
+        const OBSTACLE_MAX_DISTANCE = 700;
 
-        let state = {
-            started: false, over: false, score: 0, speed: 8, frame: 0,
-            jumpCount: 0, isFlying: false, keys: {},
-            currentBiome: 0, lastBiomePoint: 0,
-            last1kPlayed: 0, last10kPlayed: 0,
-            skyColor: {r: 135, g: 206, b: 235}
-        };
-
-        const biomes = [
-            {ground: '#e3c9a1', name: 'DESERT', sky: {r:135, g:206, b:235}, heat: true, obs: '#2d5a27'},
-            {ground: '#1a1a1a', name: 'VOLCANO', sky: {r:60, g:60, b:70}, heat: true, obs: '#ff4500'},
-            {ground: '#2d5a27', name: 'FOREST', sky: {r:20, g:40, b:20}, heat: false, obs: '#0d1a0d'}
-        ];
-
-        const dino = { x: 50, y: GROUND_Y - 44, dy: 0, w: 34, h: 44 };
+        // Game state
+        let gameSpeed = INITIAL_SPEED;
+        let score = 0;
+        let highScore = parseInt(localStorage.getItem('dinoHighScore')) || 0;
+        let isGameOver = false;
+        let gameStarted = false;
         let obstacles = [];
+        let frameCount = 0;
+        let animationFrameId;
+        let nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
+        let mountainOffset = 0;
+        let dayTime = 0; // 0 = day, increases to create day/night cycle
 
-        function unlockAudio() {
-            // This function "wakes up" the browser audio on the first click
-            Object.values(snd).forEach(s => {
-                s.play().then(() => {
-                    s.pause();
-                    s.currentTime = 0;
-                }).catch(e => console.log("Audio waiting for user..."));
-            });
+        // Custom additions
+        let canFly = false;
+        let isInvincible = false;
+        let spaceCount = 0;
+        let lastSpaceTime = 0;
+        let tapCount = 0;
+        let lastTapTime = 0;
+        let showCheatMessage = false;
+        let cheatMessageTimer = 0;
+        let flightSpeed = 4;
+        let lastMilestoneScore = 0;
+
+        // Arrow key state
+        let keysPressed = {
+            up: false,
+            down: false
+        };
+
+        // Load external audio files
+        const noiceAudio = new Audio('audiotrimmer_adesehy.mp3');
+        noiceAudio.volume = 0.5;
+        
+        const applauseAudio = new Audio('aplausos_2.mp3');
+        applauseAudio.volume = 0.5;
+        
+        const gameOverAudio = new Audio('directed-by-robert-b_voI2Z4T.mp3');
+        gameOverAudio.volume = 0.5;
+
+        // Audio context
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const now = audioCtx.currentTime;
+
+            if (type === 'jump') {
+                const osc = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(200, now);
+                osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
+                g.gain.setValueAtTime(0.08, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+                osc.connect(g);
+                g.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.1);
+            } else if (type === 'death') {
+                gameOverAudio.currentTime = 0;
+                gameOverAudio.play().catch(e => console.log('Audio play failed:', e));
+            } else if (type === 'ding') {
+                const osc = audioCtx.createOscillator();
+                const g = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
+                g.gain.setValueAtTime(0.15, now);
+                g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+                osc.connect(g);
+                g.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(now + 0.2);
+            } else if (type === 'applause') {
+                applauseAudio.currentTime = 0;
+                applauseAudio.play().catch(e => console.log('Audio play failed:', e));
+            } else if (type === 'noice') {
+                noiceAudio.currentTime = 0;
+                noiceAudio.play().catch(e => console.log('Audio play failed:', e));
+            }
         }
 
-        function startOrRestart() {
-            unlockAudio();
-            state.started = true; state.over = false; state.score = 0; state.speed = 8;
-            state.isFlying = false; state.last1kPlayed = 0; state.last10kPlayed = 0;
-            state.currentBiome = 0; state.lastBiomePoint = 0;
-            obstacles = []; dino.y = GROUND_Y-44; dino.dy = 0;
-            document.getElementById('gui').style.display = 'none';
+        // Day/Night cycle
+        function updateDayNightCycle() {
+            dayTime += 0.001;
+            if (dayTime > Math.PI * 2) dayTime = 0;
         }
 
-        function drawDino(x, y) {
-            ctx.fillStyle = "#548d44"; // Main Body
-            ctx.fillRect(x + 4, y, 22, 16); // Head
-            ctx.fillRect(x, y + 14, 30, 24); // Torso
-            ctx.fillStyle = "#3a5e2f"; // Detail/Shadow
-            ctx.fillRect(x + 2, y + 18, 26, 4);
-            ctx.fillStyle = "#fff"; ctx.fillRect(x + 20, y + 4, 4, 4); // Eye
+        function getSkyColor() {
+            const cycle = Math.sin(dayTime);
+            if (cycle > 0.7) {
+                // Day
+                const t = (cycle - 0.7) / 0.3;
+                return {
+                    top: `rgb(${Math.floor(135 * t + 25 * (1-t))}, ${Math.floor(206 * t + 25 * (1-t))}, ${Math.floor(235 * t + 112 * (1-t))})`,
+                    bottom: `rgb(${Math.floor(224 * t + 255 * (1-t))}, ${Math.floor(246 * t + 183 * (1-t))}, ${Math.floor(255 * t + 77 * (1-t))})`,
+                    isDark: false
+                };
+            } else if (cycle < -0.7) {
+                // Night
+                return {
+                    top: 'rgb(10, 10, 40)',
+                    bottom: 'rgb(20, 20, 60)',
+                    isDark: true
+                };
+            } else {
+                // Transition
+                const t = (cycle + 0.7) / 1.4;
+                return {
+                    top: `rgb(${Math.floor(135 * t + 10 * (1-t))}, ${Math.floor(206 * t + 10 * (1-t))}, ${Math.floor(235 * t + 40 * (1-t))})`,
+                    bottom: `rgb(${Math.floor(224 * t + 20 * (1-t))}, ${Math.floor(246 * t + 20 * (1-t))}, ${Math.floor(255 * t + 60 * (1-t))})`,
+                    isDark: cycle < 0
+                };
+            }
         }
 
-        function drawCactus(x, y, color) {
-            ctx.fillStyle = color;
-            ctx.fillRect(x + 10, y, 12, 40); // Main trunk
-            ctx.fillRect(x, y + 15, 8, 8);   // Left arm base
-            ctx.fillRect(x, y + 5, 4, 10);   // Left arm up
-            ctx.fillRect(x + 22, y + 10, 8, 8); // Right arm base
-            ctx.fillRect(x + 26, y, 4, 10);    // Right arm up
+        function drawSky() {
+            const sky = getSkyColor();
+            const gradient = ctx.createLinearGradient(0, 0, 0, GROUND_Y + 47);
+            gradient.addColorStop(0, sky.top);
+            gradient.addColorStop(1, sky.bottom);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, GROUND_Y + 47);
         }
 
-        function update() {
-            if (!state.started || state.over) return;
-            state.frame++; state.score += state.speed / 20;
-
-            let scoreInt = Math.floor(state.score);
+        function drawCelestialBodies() {
+            const cycle = Math.sin(dayTime);
+            const sunY = 30 + (1 - cycle) * 40;
+            const moonY = 30 + (1 + cycle) * 40;
             
-            // 10,000 Milestone Audio
-            if (scoreInt > 0 && scoreInt % 10000 === 0 && scoreInt > state.last10kPlayed) {
-                snd.milestone.play(); 
-                state.last10kPlayed = scoreInt;
-            } 
-            // 1,000 Milestone Audio
-            else if (scoreInt > 0 && scoreInt % 1000 === 0 && scoreInt > state.last1kPlayed) {
-                snd.cheer.play(); 
-                state.last1kPlayed = scoreInt;
-            }
-
-            if (scoreInt > state.lastBiomePoint + 1000) {
-                state.currentBiome = Math.floor(Math.random() * biomes.length);
-                state.lastBiomePoint = scoreInt;
-            }
-
-            let biome = biomes[state.currentBiome];
-            state.skyColor.r += (biome.sky.r - state.skyColor.r) * 0.05;
-            state.skyColor.g += (biome.sky.g - state.skyColor.g) * 0.05;
-            state.skyColor.b += (biome.sky.b - state.skyColor.b) * 0.05;
-
-            // Handle Flight & Movement
-            if (state.keys['ArrowDown'] && !state.isFlying) {
-                dino.h = 24; if (dino.y >= GROUND_Y - 44) dino.y = GROUND_Y - 24;
-            } else {
-                dino.h = 44;
-            }
-
-            if (state.isFlying) {
-                if (state.keys['ArrowUp']) dino.dy = -10;
-                else if (state.keys['ArrowDown']) dino.dy = 10;
-                else dino.dy *= 0.9;
-                dino.y += dino.dy;
-            } else {
-                dino.dy += 0.8; dino.y += dino.dy;
-            }
-
-            if (dino.y > GROUND_Y - dino.h) { dino.y = GROUND_Y - dino.h; dino.dy = 0; }
-            if (dino.y < 10) dino.y = 10;
-            state.speed += 0.002;
-
-            // Obstacle Spawning
-            if (state.frame % Math.max(25, Math.floor(500/state.speed)) === 0) {
-                let isBird = Math.random() > 0.4;
-                obstacles.push({x: 850, y: isBird ? GROUND_Y - 90 : GROUND_Y - 40, w: 32, h: isBird ? 20 : 40, type: isBird ? 'bird' : 'cactus'});
-            }
-
-            obstacles.forEach(o => {
-                o.x -= state.speed;
-                if (dino.x < o.x + o.w && dino.x + 30 > o.x && dino.y < o.y + o.h && dino.y + dino.h > o.y) {
-                    state.over = true;
-                    snd.lose.play();
-                    document.getElementById('gui').style.display = 'flex';
+            // Sun
+            if (cycle > -0.3) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, (cycle + 0.3) / 0.6));
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(700, sunY, 20, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Sun rays
+                for (let i = 0; i < 8; i++) {
+                    const angle = (i * Math.PI / 4) + frameCount * 0.02;
+                    const x1 = 700 + Math.cos(angle) * 25;
+                    const y1 = sunY + Math.sin(angle) * 25;
+                    const x2 = 700 + Math.cos(angle) * 35;
+                    const y2 = sunY + Math.sin(angle) * 35;
+                    ctx.strokeStyle = '#FFD700';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
+                    ctx.stroke();
                 }
-            });
-            obstacles = obstacles.filter(o => o.x > -100);
+                ctx.restore();
+            }
+            
+            // Moon
+            if (cycle < 0.3) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, (0.3 - cycle) / 0.6));
+                ctx.fillStyle = '#F0F0F0';
+                ctx.beginPath();
+                ctx.arc(700, moonY, 18, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Moon craters
+                ctx.fillStyle = '#D0D0D0';
+                ctx.beginPath();
+                ctx.arc(695, moonY - 5, 4, 0, Math.PI * 2);
+                ctx.arc(708, moonY + 3, 3, 0, Math.PI * 2);
+                ctx.arc(697, moonY + 7, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+            
+            // Stars (only at night)
+            if (cycle < 0) {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, Math.min(1, -cycle));
+                ctx.fillStyle = '#FFFFFF';
+                const stars = [
+                    {x: 50, y: 20}, {x: 120, y: 35}, {x: 200, y: 15},
+                    {x: 280, y: 45}, {x: 350, y: 25}, {x: 420, y: 40},
+                    {x: 500, y: 18}, {x: 580, y: 50}, {x: 650, y: 30}
+                ];
+                stars.forEach(star => {
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Twinkle effect
+                    if (Math.random() > 0.95) {
+                        ctx.beginPath();
+                        ctx.arc(star.x, star.y, 2.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                });
+                ctx.restore();
+            }
         }
 
-        function draw() {
-            let biome = biomes[state.currentBiome];
-            ctx.fillStyle = `rgb(${state.skyColor.r},${state.skyColor.g},${state.skyColor.b})`;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        function drawMountains() {
+            mountainOffset -= gameSpeed * 0.1;
+            if (mountainOffset < -400) mountainOffset = 0;
 
-            ctx.fillStyle = biome.ground;
-            ctx.fillRect(0, GROUND_Y, 800, 40);
+            const sky = getSkyColor();
+            const mountainColor = sky.isDark ? '#2C3E50' : '#8B7355';
+            const snowColor = sky.isDark ? '#BDC3C7' : '#FFFFFF';
 
-            drawDino(dino.x, dino.y);
-
-            obstacles.forEach(o => {
-                if(o.type==='cactus') drawCactus(o.x, o.y, biome.obs);
-                else { ctx.fillStyle = "#4a3b37"; ctx.fillRect(o.x, o.y, 30, 10); } // Bird placeholder
-            });
-
-            ctx.fillStyle = "#fff"; ctx.font = "bold 14px Courier New";
-            ctx.fillText(`${biome.name} | SCORE: ${Math.floor(state.score)}`, 20, 30);
+            ctx.fillStyle = mountainColor;
+            
+            for (let i = -1; i < 3; i++) {
+                const baseX = i * 400 + mountainOffset;
+                
+                ctx.globalAlpha = 0.3;
+                ctx.beginPath();
+                ctx.moveTo(baseX - 50, GROUND_Y + 47);
+                ctx.lineTo(baseX + 50, 30);
+                ctx.lineTo(baseX + 150, GROUND_Y + 47);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(baseX + 100, GROUND_Y + 47);
+                ctx.lineTo(baseX + 180, 50);
+                ctx.lineTo(baseX + 260, GROUND_Y + 47);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(baseX + 20, GROUND_Y + 47);
+                ctx.lineTo(baseX + 120, 40);
+                ctx.lineTo(baseX + 220, GROUND_Y + 47);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.fillStyle = snowColor;
+                ctx.beginPath();
+                ctx.moveTo(baseX + 120, 40);
+                ctx.lineTo(baseX + 100, 55);
+                ctx.lineTo(baseX + 140, 55);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.globalAlpha = 1.0;
+            ctx.fillStyle = mountainColor;
         }
 
-        function loop() { update(); draw(); requestAnimationFrame(loop); }
+        function drawDino(x, y, width, height, legFrame) {
+            const color = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#2ecc71");
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(x + 18, y + 10, 26, 20);
+            
+            ctx.beginPath();
+            ctx.arc(x + 31, y + 12, 8, Math.PI, 0);
+            ctx.fill();
+            
+            ctx.fillRect(x + 8, y + 18, 12, 6);
+            ctx.fillRect(x + 4, y + 20, 8, 4);
+            ctx.beginPath();
+            ctx.arc(x + 4, y + 22, 3, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillRect(x + 38, y + 8, 8, 16);
+            ctx.fillRect(x + 40, y + 2, 16, 12);
+            ctx.beginPath();
+            ctx.arc(x + 48, y + 8, 6, -Math.PI/2, Math.PI/2);
+            ctx.fill();
+            
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            ctx.arc(x + 50, y + 6, 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.strokeStyle = "#000";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + 54, y + 10);
+            ctx.lineTo(x + 50, y + 11);
+            ctx.stroke();
+            
+            ctx.fillStyle = color;
+            if (legFrame === 0) {
+                ctx.fillRect(x + 22, y + 30, 6, 12);
+                ctx.fillRect(x + 32, y + 30, 6, 12);
+                ctx.fillRect(x + 22, y + 42, 8, 3);
+                ctx.fillRect(x + 32, y + 42, 8, 3);
+            } else {
+                ctx.fillRect(x + 20, y + 30, 6, 12);
+                ctx.fillRect(x + 34, y + 30, 6, 12);
+                ctx.fillRect(x + 20, y + 42, 8, 3);
+                ctx.fillRect(x + 34, y + 42, 8, 3);
+            }
+            
+            ctx.fillRect(x + 40, y + 16, 4, 8);
+        }
 
-        window.addEventListener('keydown', e => {
-            state.keys[e.code] = true;
+        function drawCactus(x, y, width, height) {
+            ctx.fillStyle = "#27ae60";
+            ctx.fillRect(x + 12, y, 12, height);
+            ctx.fillRect(x + 4, y + height/3, 8, height/2);
+            ctx.fillRect(x + 4, y + height/3, 4, height/3);
+            ctx.fillRect(x + 24, y + height/2, 8, height/2.5);
+            ctx.fillRect(x + 28, y + height/2, 4, height/3);
+            
+            ctx.fillStyle = "#229954";
+            for (let i = 0; i < height; i += 8) {
+                ctx.fillRect(x + 10, y + i, 2, 4);
+                ctx.fillRect(x + 24, y + i + 4, 2, 4);
+            }
+        }
+
+        function drawPterodactyl(x, y, width, height, frame) {
+            const color = "#8B4513";
+            const wingUp = frame % 20 < 10;
+            
+            ctx.fillStyle = color;
+            ctx.fillRect(x + 10, y + 8, 20, 8);
+            
+            ctx.beginPath();
+            ctx.arc(x + 30, y + 10, 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = "#DAA520";
+            ctx.beginPath();
+            ctx.moveTo(x + 36, y + 10);
+            ctx.lineTo(x + 42, y + 8);
+            ctx.lineTo(x + 42, y + 12);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.fillStyle = "#000";
+            ctx.beginPath();
+            ctx.arc(x + 32, y + 9, 1.5, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = color;
+            if (wingUp) {
+                ctx.beginPath();
+                ctx.moveTo(x + 15, y + 8);
+                ctx.lineTo(x + 5, y - 8);
+                ctx.lineTo(x + 18, y + 10);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(x + 25, y + 8);
+                ctx.lineTo(x + 35, y - 8);
+                ctx.lineTo(x + 28, y + 10);
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(x + 15, y + 16);
+                ctx.lineTo(x + 5, y + 24);
+                ctx.lineTo(x + 18, y + 14);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(x + 25, y + 16);
+                ctx.lineTo(x + 35, y + 24);
+                ctx.lineTo(x + 28, y + 14);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.beginPath();
+            ctx.moveTo(x + 10, y + 12);
+            ctx.lineTo(x, y + 10);
+            ctx.lineTo(x + 10, y + 10);
+            ctx.closePath();
+            ctx.fill();
+            
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(x + 15, y + 16);
+            ctx.lineTo(x + 13, y + 20);
+            ctx.moveTo(x + 25, y + 16);
+            ctx.lineTo(x + 23, y + 20);
+            ctx.stroke();
+        }
+
+        const dino = {
+            x: 50,
+            y: GROUND_Y,
+            width: 60,
+            height: 47,
+            dy: 0,
+            isJumping: false,
+            legFrame: 0,
+            targetY: GROUND_Y,
+            
+            draw() {
+                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.6;
+                }
+
+                drawDino(this.x, this.y, this.width, this.height, this.legFrame);
+
+                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
+                    ctx.restore();
+                }
+            },
+
+            update() {
+                if (canFly) {
+                    if (keysPressed.up) {
+                        this.targetY = Math.max(20, this.targetY - flightSpeed);
+                    }
+                    if (keysPressed.down) {
+                        this.targetY = Math.min(GROUND_Y, this.targetY + flightSpeed);
+                    }
+                    
+                    const diff = this.targetY - this.y;
+                    this.y += diff * 0.3;
+                    this.dy = 0;
+                } else {
+                    this.dy += GRAVITY;
+                    this.y += this.dy;
+
+                    if (this.y >= GROUND_Y) {
+                        this.y = GROUND_Y;
+                        this.dy = 0;
+                        this.isJumping = false;
+                    }
+                }
+
+                if (this.y >= GROUND_Y && gameStarted && !isGameOver) {
+                    if (frameCount % 6 === 0) {
+                        this.legFrame = 1 - this.legFrame;
+                    }
+                }
+
+                this.draw();
+            },
+
+            jump() {
+                if (!canFly && !this.isJumping && this.y >= GROUND_Y && !isGameOver && gameStarted) {
+                    this.dy = JUMP_FORCE;
+                    this.isJumping = true;
+                    playSound('jump');
+                }
+            }
+        };
+
+        class Obstacle {
+            constructor() {
+                this.x = canvas.width;
+                this.type = Math.random() > 0.7 ? 'pterodactyl' : 'cactus';
+                
+                if (this.type === 'pterodactyl') {
+                    this.width = 46;
+                    this.height = 30;
+                    this.y = GROUND_Y - 40 - Math.random() * 30;
+                } else {
+                    this.width = 36;
+                    this.height = 45;
+                    this.y = GROUND_Y + (47 - this.height);
+                    
+                    if (Math.random() > 0.7) {
+                        this.height = 50 + Math.floor(Math.random() * 15);
+                        this.y = GROUND_Y + (47 - this.height);
+                    }
+                }
+            }
+
+            update() {
+                this.x -= gameSpeed;
+
+                if (this.type === 'pterodactyl') {
+                    drawPterodactyl(this.x, this.y, this.width, this.height, frameCount);
+                } else {
+                    drawCactus(this.x, this.y, this.width, this.height);
+                }
+            }
+
+            collidesWith(dino) {
+                const margin = this.type === 'pterodactyl' ? 8 : 5;
+                return (
+                    dino.x < this.x + this.width - margin &&
+                    dino.x + dino.width - margin > this.x &&
+                    dino.y < this.y + this.height - margin &&
+                    dino.y + dino.height - margin > this.y
+                );
+            }
+        }
+
+        function drawGround() {
+            const sky = getSkyColor();
+            ctx.strokeStyle = sky.isDark ? '#555' : '#654321';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND_Y + 47);
+            ctx.lineTo(canvas.width, GROUND_Y + 47);
+            ctx.stroke();
+            
+            ctx.fillStyle = sky.isDark ? '#666' : '#8B7355';
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.fillRect(i + (frameCount % 20), GROUND_Y + 50, 2, 2);
+            }
+        }
+
+        function drawScore() {
+            const displayScore = Math.floor(score);
+            const sky = getSkyColor();
+            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
+            ctx.font = 'bold 18px Courier';
+            ctx.textAlign = 'right';
+            ctx.fillText('HI ' + String(Math.floor(highScore)).padStart(5, '0'), canvas.width - 10, 30);
+            ctx.fillText(String(displayScore).padStart(5, '0'), canvas.width - 10, 55);
+        }
+
+        function drawGameOver() {
+            const sky = getSkyColor();
+            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
+            ctx.font = 'bold 28px Courier';
+            ctx.textAlign = 'center';
+            ctx.fillText('G A M E  O V E R', canvas.width / 2, canvas.height / 2 - 20);
+            ctx.font = '18px Courier';
+            ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 15);
+        }
+
+        function drawStartMessage() {
+            const sky = getSkyColor();
+            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
+            ctx.font = '18px Courier';
+            ctx.textAlign = 'center';
+            ctx.fillText('Press SPACE or Click to Start', canvas.width / 2, canvas.height / 2);
+        }
+
+        function spawnObstacle() {
+            const difficultyMultiplier = Math.max(0.4, 1 - (score / 3000));
+            const adjustedMinDistance = OBSTACLE_MIN_DISTANCE * difficultyMultiplier;
+            const adjustedMaxDistance = OBSTACLE_MAX_DISTANCE * difficultyMultiplier;
+            const doubleObstacleChance = Math.min(0.3, score / 10000);
+            const shouldSpawnDouble = Math.random() < doubleObstacleChance;
+
+            if (obstacles.length === 0) {
+                nextObstacleDistance--;
+                if (nextObstacleDistance <= 0) {
+                    obstacles.push(new Obstacle());
+                    if (shouldSpawnDouble && score > 500) {
+                        setTimeout(() => obstacles.push(new Obstacle()), 100);
+                    }
+                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
+                }
+            } else {
+                const lastObstacle = obstacles[obstacles.length - 1];
+                if (canvas.width - lastObstacle.x > nextObstacleDistance) {
+                    obstacles.push(new Obstacle());
+                    if (shouldSpawnDouble && score > 500) {
+                        setTimeout(() => obstacles.push(new Obstacle()), 100);
+                    }
+                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
+                }
+            }
+        }
+
+        function checkCollisions() {
+            if (isInvincible) return;
+
+            for (let obstacle of obstacles) {
+                if (obstacle.collidesWith(dino)) {
+                    gameOver();
+                    break;
+                }
+            }
+        }
+
+        function gameOver() {
+            isGameOver = true;
+            playSound('death');
+            
+            if (score > highScore) {
+                highScore = score;
+                localStorage.setItem('dinoHighScore', Math.floor(highScore));
+            }
+        }
+
+        function resetGame() {
+            score = 0;
+            gameSpeed = INITIAL_SPEED;
+            isGameOver = false;
+            gameStarted = false;
+            obstacles = [];
+            frameCount = 0;
+            dino.y = GROUND_Y;
+            dino.dy = 0;
+            dino.isJumping = false;
+            dino.targetY = GROUND_Y;
+            nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
+            canFly = false;
+            isInvincible = false;
+            spaceCount = 0;
+            tapCount = 0;
+            showCheatMessage = false;
+            cheatMessageTimer = 0;
+            lastMilestoneScore = 0;
+            keysPressed = { up: false, down: false };
+            
+            cancelAnimationFrame(animationFrameId);
+            animate();
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            updateDayNightCycle();
+            drawSky();
+            drawCelestialBodies();
+            drawMountains();
+            drawGround();
+
+            if (!gameStarted) {
+                dino.draw();
+                drawStartMessage();
+                animationFrameId = requestAnimationFrame(animate);
+                return;
+            }
+
+            if (isGameOver) {
+                dino.draw();
+                obstacles.forEach(obs => obs.update());
+                drawScore();
+                drawGameOver();
+                return;
+            }
+
+            if (gameSpeed < MAX_SPEED) {
+                gameSpeed += SPEED_INCREMENT;
+            }
+
+            if (canFly) {
+                score += 250 / 60;
+            } else {
+                score += 100 / 120;
+            }
+
+            const currentScore = Math.floor(score);
+            
+            if (currentScore > 0 && currentScore !== lastMilestoneScore) {
+                if (currentScore % 10000 === 0) {
+                    playSound('noice');
+                    lastMilestoneScore = currentScore;
+                } else if (currentScore % 1000 === 0) {
+                    playSound('applause');
+                    lastMilestoneScore = currentScore;
+                } else if (currentScore % 100 === 0) {
+                    playSound('ding');
+                    lastMilestoneScore = currentScore;
+                }
+            }
+
+            dino.update();
+
+            spawnObstacle();
+            obstacles = obstacles.filter(obs => {
+                obs.update();
+                return obs.x > -obs.width;
+            });
+
+            checkCollisions();
+            drawScore();
+
+            frameCount++;
+            animationFrameId = requestAnimationFrame(animate);
+        }
+
+        document.addEventListener('keydown', (e) => {
             if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (!state.isFlying) {
-                    state.jumpCount++;
-                    if (state.jumpCount >= 3) state.isFlying = true;
-                    else if (dino.y >= GROUND_Y - 44) dino.dy = -14;
+                e.preventDefault();
+                
+                if (!gameStarted) {
+                    gameStarted = true;
+                    return;
                 }
-            }
-            if (e.code === 'KeyR') { state.isFlying = false; state.jumpCount = 0; dino.dy = 10; }
-        });
-        window.addEventListener('keyup', e => state.keys[e.code] = false);
-        loop();
-    </script>
-</body>
-</html>
+
+                if (isGameOver) return;
+
+                const now = Date.now();
+                if (now -
