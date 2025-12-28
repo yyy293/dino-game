@@ -59,7 +59,6 @@
     <div id="info">
         <p><span class="key">SPACE</span> or <span class="key">CLICK</span> to jump | <span class="key">SPACE×3</span> or <span class="key">CLICK×3</span> for flight mode</p>
         <p>Flight: <span class="key">↑</span> <span class="key">↓</span> to move | <span class="key">R</span> for invincibility | <span class="key">R</span> after game over to restart</p>
-        <p style="color: #e74c3c; font-weight: bold;">⚠️ Cactuses can still hit you while flying (unless invincible)!</p>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
@@ -68,13 +67,7 @@
         canvas.height = 200;
 
         // Game constants
-        const GRAVITY = 0.6;
-        const JUMP_FORCE = -11;
-        const GROUND_Y = 150;
-        const INITIAL_SPEED = 6;
-        const SPEED_INCREMENT = 0.001;
-        const MAX_SPEED = 13;
-        const OBSTACLE_MIN_DISTANCE = 400;
+_DISTANCE = 400;
         const OBSTACLE_MAX_DISTANCE = 800;
 
         // Game state
@@ -215,6 +208,34 @@
                     g.connect(audioCtx.destination);
                     noise.start(now + delay);
                 }
+            } else if (type === 'noice') {
+                // "Noice" meme sound for 10000 milestone
+                const notes = [
+                    {freq: 400, start: 0, duration: 0.15},
+                    {freq: 500, start: 0.15, duration: 0.25}
+                ];
+                
+                notes.forEach(note => {
+                    const osc = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    const filter = audioCtx.createBiquadFilter();
+                    
+                    filter.type = "lowpass";
+                    filter.frequency.value = 2000;
+                    
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(note.freq, now + note.start);
+                    
+                    g.gain.setValueAtTime(0, now + note.start);
+                    g.gain.linearRampToValueAtTime(0.2, now + note.start + 0.02);
+                    g.gain.exponentialRampToValueAtTime(0.001, now + note.start + note.duration);
+                    
+                    osc.connect(filter);
+                    filter.connect(g);
+                    g.connect(audioCtx.destination);
+                    osc.start(now + note.start);
+                    osc.stop(now + note.start + note.duration);
+                });
             }
         }
 
