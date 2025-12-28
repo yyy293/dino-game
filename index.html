@@ -49,9 +49,9 @@
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
         const GROUND_Y = 150;
-        const INITIAL_SPEED = 10;
-        const SPEED_INCREMENT = 0.005;
-        const MAX_SPEED = 25;
+        const INITIAL_SPEED = 6;
+        const SPEED_INCREMENT = 0.002;
+        const MAX_SPEED = 14;
         const OBSTACLE_MIN_DISTANCE = 350;
         const OBSTACLE_MAX_DISTANCE = 700;
 
@@ -232,32 +232,68 @@
                     osc.stop(now + delay + 0.2);
                 }
             } else if (type === 'noice') {
-                const notes = [
-                    {freq: 400, start: 0, duration: 0.15},
-                    {freq: 500, start: 0.15, duration: 0.25}
-                ];
+                // "Noice" meme sound - distinctive two-syllable sound
+                // First part: "Noi" (lower, nasal)
+                const osc1 = audioCtx.createOscillator();
+                const g1 = audioCtx.createGain();
+                const filter1 = audioCtx.createBiquadFilter();
                 
-                notes.forEach(note => {
-                    const osc = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    const filter = audioCtx.createBiquadFilter();
-                    
-                    filter.type = "lowpass";
-                    filter.frequency.value = 2000;
-                    
-                    osc.type = 'sawtooth';
-                    osc.frequency.setValueAtTime(note.freq, now + note.start);
-                    
-                    g.gain.setValueAtTime(0, now + note.start);
-                    g.gain.linearRampToValueAtTime(0.2, now + note.start + 0.02);
-                    g.gain.exponentialRampToValueAtTime(0.001, now + note.start + note.duration);
-                    
-                    osc.connect(filter);
-                    filter.connect(g);
-                    g.connect(audioCtx.destination);
-                    osc.start(now + note.start);
-                    osc.stop(now + note.start + note.duration);
-                });
+                filter1.type = "bandpass";
+                filter1.frequency.value = 800;
+                filter1.Q.value = 5;
+                
+                osc1.type = 'sawtooth';
+                osc1.frequency.setValueAtTime(250, now);
+                osc1.frequency.linearRampToValueAtTime(280, now + 0.12);
+                
+                g1.gain.setValueAtTime(0, now);
+                g1.gain.linearRampToValueAtTime(0.25, now + 0.02);
+                g1.gain.setValueAtTime(0.25, now + 0.12);
+                g1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
+                
+                osc1.connect(filter1);
+                filter1.connect(g1);
+                g1.connect(audioCtx.destination);
+                osc1.start(now);
+                osc1.stop(now + 0.18);
+                
+                // Second part: "ce" (higher, crisp)
+                const osc2 = audioCtx.createOscillator();
+                const g2 = audioCtx.createGain();
+                const filter2 = audioCtx.createBiquadFilter();
+                
+                filter2.type = "highpass";
+                filter2.frequency.value = 1200;
+                filter2.Q.value = 2;
+                
+                osc2.type = 'sawtooth';
+                osc2.frequency.setValueAtTime(450, now + 0.12);
+                osc2.frequency.linearRampToValueAtTime(400, now + 0.35);
+                
+                g2.gain.setValueAtTime(0, now + 0.12);
+                g2.gain.linearRampToValueAtTime(0.28, now + 0.14);
+                g2.gain.setValueAtTime(0.28, now + 0.3);
+                g2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                
+                osc2.connect(filter2);
+                filter2.connect(g2);
+                g2.connect(audioCtx.destination);
+                osc2.start(now + 0.12);
+                osc2.stop(now + 0.45);
+                
+                // Add overtones for richness
+                const osc3 = audioCtx.createOscillator();
+                const g3 = audioCtx.createGain();
+                osc3.type = 'sine';
+                osc3.frequency.setValueAtTime(500, now);
+                osc3.frequency.linearRampToValueAtTime(560, now + 0.12);
+                osc3.frequency.linearRampToValueAtTime(800, now + 0.35);
+                g3.gain.setValueAtTime(0.08, now);
+                g3.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+                osc3.connect(g3);
+                g3.connect(audioCtx.destination);
+                osc3.start(now);
+                osc3.stop(now + 0.45);
             }
         }
 
@@ -380,6 +416,12 @@
                 this.width = 30;
                 this.height = 45;
                 this.y = GROUND_Y + (47 - this.height);
+                
+                // Randomly make some obstacles taller/wider for variety
+                if (Math.random() > 0.7) {
+                    this.height = 50 + Math.floor(Math.random() * 15);
+                    this.y = GROUND_Y + (47 - this.height);
+                }
             }
 
             update() {
@@ -439,20 +481,35 @@
 
         // Game logic functions
         function spawnObstacle() {
-            const difficultyMultiplier = Math.max(0.5, 1 - (score / 5000));
+            // Progressive difficulty: more obstacles spawn as score increases
+            const difficultyMultiplier = Math.max(0.4, 1 - (score / 3000));
             const adjustedMinDistance = OBSTACLE_MIN_DISTANCE * difficultyMultiplier;
             const adjustedMaxDistance = OBSTACLE_MAX_DISTANCE * difficultyMultiplier;
+
+            // Chance to spawn multiple obstacles close together at higher scores
+            const doubleObstacleChance = Math.min(0.3, score / 10000);
+            const shouldSpawnDouble = Math.random() < doubleObstacleChance;
 
             if (obstacles.length === 0) {
                 nextObstacleDistance--;
                 if (nextObstacleDistance <= 0) {
                     obstacles.push(new Obstacle());
+                    if (shouldSpawnDouble && score > 500) {
+                        setTimeout(() => {
+                            obstacles.push(new Obstacle());
+                        }, 100);
+                    }
                     nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
                 }
             } else {
                 const lastObstacle = obstacles[obstacles.length - 1];
                 if (canvas.width - lastObstacle.x > nextObstacleDistance) {
                     obstacles.push(new Obstacle());
+                    if (shouldSpawnDouble && score > 500) {
+                        setTimeout(() => {
+                            obstacles.push(new Obstacle());
+                        }, 100);
+                    }
                     nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
                 }
             }
