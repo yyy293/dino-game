@@ -540,9 +540,9 @@ _DISTANCE = 400;
                 gameSpeed += SPEED_INCREMENT;
             }
 
-            // Update score: Normal = 100 per 2 sec, Flight = 500 per 2 sec (at 60fps = 120 frames)
+            // Update score: Normal = 100 per 2 sec, Flight = 250 per second (1000 per 4 sec)
             if (canFly) {
-                score += 500 / 120; // 500 points per 2 seconds in flight mode
+                score += 250 / 60; // 250 points per second = 1000 points per 4 seconds in flight mode
             } else {
                 score += 100 / 120; // 100 points per 2 seconds normally
             }
