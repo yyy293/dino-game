@@ -67,7 +67,9 @@
         let animationFrameId;
         let nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
         let mountainOffset = 0;
-        let dayTime = 0; // 0 = day, increases to create day/night cycle
+        let dayTime = 0;
+        let particles = [];
+        let flightSpeedMPH = 0;
 
         // Custom additions
         let canFly = false;
@@ -78,7 +80,7 @@
         let lastTapTime = 0;
         let showCheatMessage = false;
         let cheatMessageTimer = 0;
-        let flightSpeed = 4;
+        let flightSpeed = 8;
         let lastMilestoneScore = 0;
 
         // Arrow key state
@@ -140,6 +142,45 @@
             }
         }
 
+        // Particle system
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.size = Math.random() * 3 + 1;
+                this.speedX = -gameSpeed * 0.5;
+                this.speedY = (Math.random() - 0.5) * 2;
+                this.life = 20;
+            }
+
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life--;
+            }
+
+            draw() {
+                ctx.fillStyle = `rgba(139, 115, 85, ${this.life / 20})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function createRunParticles() {
+            if (dino.y >= GROUND_Y - 5 && !canFly && frameCount % 3 === 0) {
+                particles.push(new Particle(dino.x + 10, dino.y + dino.height));
+            }
+        }
+
+        function updateParticles() {
+            particles = particles.filter(p => {
+                p.update();
+                p.draw();
+                return p.life > 0;
+            });
+        }
+
         // Day/Night cycle
         function updateDayNightCycle() {
             dayTime += 0.001;
@@ -149,7 +190,6 @@
         function getSkyColor() {
             const cycle = Math.sin(dayTime);
             if (cycle > 0.7) {
-                // Day
                 const t = (cycle - 0.7) / 0.3;
                 return {
                     top: `rgb(${Math.floor(135 * t + 25 * (1-t))}, ${Math.floor(206 * t + 25 * (1-t))}, ${Math.floor(235 * t + 112 * (1-t))})`,
@@ -157,14 +197,12 @@
                     isDark: false
                 };
             } else if (cycle < -0.7) {
-                // Night
                 return {
                     top: 'rgb(10, 10, 40)',
                     bottom: 'rgb(20, 20, 60)',
                     isDark: true
                 };
             } else {
-                // Transition
                 const t = (cycle + 0.7) / 1.4;
                 return {
                     top: `rgb(${Math.floor(135 * t + 10 * (1-t))}, ${Math.floor(206 * t + 10 * (1-t))}, ${Math.floor(235 * t + 40 * (1-t))})`,
@@ -187,6 +225,7 @@
             const cycle = Math.sin(dayTime);
             const sunY = 30 + (1 - cycle) * 40;
             const moonY = 30 + (1 + cycle) * 40;
+            const mach = flightSpeedMPH / 767;
             
             // Sun
             if (cycle > -0.3) {
@@ -197,7 +236,6 @@
                 ctx.arc(700, sunY, 20, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Sun rays
                 for (let i = 0; i < 8; i++) {
                     const angle = (i * Math.PI / 4) + frameCount * 0.02;
                     const x1 = 700 + Math.cos(angle) * 25;
@@ -223,7 +261,6 @@
                 ctx.arc(700, moonY, 18, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Moon craters
                 ctx.fillStyle = '#D0D0D0';
                 ctx.beginPath();
                 ctx.arc(695, moonY - 5, 4, 0, Math.PI * 2);
@@ -233,28 +270,44 @@
                 ctx.restore();
             }
             
-            // Stars (only at night)
+            // Stars - normal or streaked at Mach 3+
             if (cycle < 0) {
                 ctx.save();
                 ctx.globalAlpha = Math.max(0, Math.min(1, -cycle));
-                ctx.fillStyle = '#FFFFFF';
+                
                 const stars = [
                     {x: 50, y: 20}, {x: 120, y: 35}, {x: 200, y: 15},
                     {x: 280, y: 45}, {x: 350, y: 25}, {x: 420, y: 40},
-                    {x: 500, y: 18}, {x: 580, y: 50}, {x: 650, y: 30}
+                    {x: 500, y: 18}, {x: 580, y: 50}, {x: 650, y: 30},
+                    {x: 100, y: 60}, {x: 400, y: 10}, {x: 600, y: 70}
                 ];
-                stars.forEach(star => {
-                    ctx.beginPath();
-                    ctx.arc(star.x, star.y, 1.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    // Twinkle effect
-                    if (Math.random() > 0.95) {
+                
+                if (mach >= 3) {
+                    // Streaked stars at Mach 3+
+                    ctx.strokeStyle = '#FFFFFF';
+                    ctx.lineWidth = 2;
+                    stars.forEach(star => {
+                        const streakLength = (mach - 3) * 20 + 30;
                         ctx.beginPath();
-                        ctx.arc(star.x, star.y, 2.5, 0, Math.PI * 2);
+                        ctx.moveTo(star.x, star.y);
+                        ctx.lineTo(star.x - streakLength, star.y);
+                        ctx.stroke();
+                    });
+                } else {
+                    // Normal stars
+                    ctx.fillStyle = '#FFFFFF';
+                    stars.forEach(star => {
+                        ctx.beginPath();
+                        ctx.arc(star.x, star.y, 1.5, 0, Math.PI * 2);
                         ctx.fill();
-                    }
-                });
+                        
+                        if (Math.random() > 0.95) {
+                            ctx.beginPath();
+                            ctx.arc(star.x, star.y, 2.5, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
+                    });
+                }
                 ctx.restore();
             }
         }
@@ -309,146 +362,235 @@
         }
 
         function drawDino(x, y, width, height, legFrame) {
-            const color = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#2ecc71");
+            const color = isInvincible ? "#f39c12" : (canFly ? "#00BFFF" : "#32CD32");
             
-            ctx.fillStyle = color;
-            ctx.fillRect(x + 18, y + 10, 26, 20);
+            // Body with gradient
+            const bodyGrad = ctx.createLinearGradient(x, y, x, y + 30);
+            bodyGrad.addColorStop(0, color);
+            bodyGrad.addColorStop(1, isInvincible ? "#e67e22" : (canFly ? "#0080FF" : "#228B22"));
+            ctx.fillStyle = bodyGrad;
             
+            // Main body
             ctx.beginPath();
-            ctx.arc(x + 31, y + 12, 8, Math.PI, 0);
+            ctx.ellipse(x + 30, y + 20, 18, 12, 0, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.fillRect(x + 8, y + 18, 12, 6);
-            ctx.fillRect(x + 4, y + 20, 8, 4);
+            // Back/tail
             ctx.beginPath();
-            ctx.arc(x + 4, y + 22, 3, 0, Math.PI * 2);
+            ctx.moveTo(x + 12, y + 22);
+            ctx.quadraticCurveTo(x + 5, y + 18, x + 3, y + 24);
+            ctx.quadraticCurveTo(x + 8, y + 28, x + 12, y + 26);
             ctx.fill();
             
-            ctx.fillRect(x + 38, y + 8, 8, 16);
-            ctx.fillRect(x + 40, y + 2, 16, 12);
+            // Neck
+            ctx.fillRect(x + 42, y + 10, 6, 14);
+            
+            // Head with detail
             ctx.beginPath();
-            ctx.arc(x + 48, y + 8, 6, -Math.PI/2, Math.PI/2);
+            ctx.ellipse(x + 50, y + 8, 10, 8, 0, 0, Math.PI * 2);
             ctx.fill();
             
+            // Snout
+            ctx.beginPath();
+            ctx.ellipse(x + 58, y + 10, 5, 4, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Eye
+            ctx.fillStyle = "#FFFFFF";
+            ctx.beginPath();
+            ctx.arc(x + 52, y + 6, 3, 0, Math.PI * 2);
+            ctx.fill();
             ctx.fillStyle = "#000";
             ctx.beginPath();
-            ctx.arc(x + 50, y + 6, 2, 0, Math.PI * 2);
+            ctx.arc(x + 53, y + 6, 1.5, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.strokeStyle = "#000";
-            ctx.lineWidth = 1;
+            // Nostril
+            ctx.fillStyle = "#000";
             ctx.beginPath();
-            ctx.moveTo(x + 54, y + 10);
-            ctx.lineTo(x + 50, y + 11);
-            ctx.stroke();
+            ctx.arc(x + 60, y + 11, 1, 0, Math.PI * 2);
+            ctx.fill();
             
+            // Spikes on back
             ctx.fillStyle = color;
-            if (legFrame === 0) {
-                ctx.fillRect(x + 22, y + 30, 6, 12);
-                ctx.fillRect(x + 32, y + 30, 6, 12);
-                ctx.fillRect(x + 22, y + 42, 8, 3);
-                ctx.fillRect(x + 32, y + 42, 8, 3);
-            } else {
-                ctx.fillRect(x + 20, y + 30, 6, 12);
-                ctx.fillRect(x + 34, y + 30, 6, 12);
-                ctx.fillRect(x + 20, y + 42, 8, 3);
-                ctx.fillRect(x + 34, y + 42, 8, 3);
+            for (let i = 0; i < 3; i++) {
+                ctx.beginPath();
+                ctx.moveTo(x + 24 + i * 8, y + 12);
+                ctx.lineTo(x + 26 + i * 8, y + 6);
+                ctx.lineTo(x + 28 + i * 8, y + 12);
+                ctx.fill();
             }
             
-            ctx.fillRect(x + 40, y + 16, 4, 8);
+            // Legs with animation
+            ctx.fillStyle = bodyGrad;
+            if (legFrame === 0) {
+                // Front leg
+                ctx.fillRect(x + 38, y + 30, 5, 13);
+                ctx.fillRect(x + 38, y + 43, 7, 2);
+                // Back leg
+                ctx.fillRect(x + 24, y + 30, 5, 13);
+                ctx.fillRect(x + 24, y + 43, 7, 2);
+            } else {
+                ctx.fillRect(x + 40, y + 30, 5, 13);
+                ctx.fillRect(x + 40, y + 43, 7, 2);
+                ctx.fillRect(x + 22, y + 30, 5, 13);
+                ctx.fillRect(x + 22, y + 43, 7, 2);
+            }
+            
+            // Arm
+            ctx.fillRect(x + 42, y + 18, 3, 8);
         }
 
         function drawCactus(x, y, width, height) {
-            ctx.fillStyle = "#27ae60";
+            const cactusGrad = ctx.createLinearGradient(x, y, x + width, y);
+            cactusGrad.addColorStop(0, "#2d7a3e");
+            cactusGrad.addColorStop(0.5, "#27ae60");
+            cactusGrad.addColorStop(1, "#1e8449");
+            ctx.fillStyle = cactusGrad;
+            
             ctx.fillRect(x + 12, y, 12, height);
             ctx.fillRect(x + 4, y + height/3, 8, height/2);
             ctx.fillRect(x + 4, y + height/3, 4, height/3);
             ctx.fillRect(x + 24, y + height/2, 8, height/2.5);
             ctx.fillRect(x + 28, y + height/2, 4, height/3);
             
-            ctx.fillStyle = "#229954";
+            ctx.fillStyle = "#1a5c2e";
             for (let i = 0; i < height; i += 8) {
-                ctx.fillRect(x + 10, y + i, 2, 4);
-                ctx.fillRect(x + 24, y + i + 4, 2, 4);
+                ctx.fillRect(x + 10, y + i, 2, 3);
+                ctx.fillRect(x + 24, y + i + 4, 2, 3);
             }
         }
 
         function drawPterodactyl(x, y, width, height, frame) {
-            const color = "#8B4513";
-            const wingUp = frame % 20 < 10;
+            const wingUp = frame % 16 < 8;
+            const bodyColor = "#8B4513";
+            const wingColor = "#A0522D";
             
-            ctx.fillStyle = color;
-            ctx.fillRect(x + 10, y + 8, 20, 8);
-            
+            // Shadow
+            ctx.fillStyle = "rgba(0,0,0,0.2)";
             ctx.beginPath();
-            ctx.arc(x + 30, y + 10, 6, 0, Math.PI * 2);
+            ctx.ellipse(x + 20, GROUND_Y + 50, 15, 4, 0, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.fillStyle = "#DAA520";
+            // Body
+            ctx.fillStyle = bodyColor;
             ctx.beginPath();
-            ctx.moveTo(x + 36, y + 10);
-            ctx.lineTo(x + 42, y + 8);
-            ctx.lineTo(x + 42, y + 12);
+            ctx.ellipse(x + 20, y + 12, 12, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Head
+            ctx.beginPath();
+            ctx.ellipse(x + 32, y + 10, 7, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Beak
+            ctx.fillStyle = "#FFA500";
+            ctx.beginPath();
+            ctx.moveTo(x + 39, y + 10);
+            ctx.lineTo(x + 46, y + 8);
+            ctx.lineTo(x + 46, y + 12);
             ctx.closePath();
             ctx.fill();
             
+            // Eye
+            ctx.fillStyle = "#FFFFFF";
+            ctx.beginPath();
+            ctx.arc(x + 34, y + 9, 2, 0, Math.PI * 2);
+            ctx.fill();
             ctx.fillStyle = "#000";
             ctx.beginPath();
-            ctx.arc(x + 32, y + 9, 1.5, 0, Math.PI * 2);
+            ctx.arc(x + 34, y + 9, 1, 0, Math.PI * 2);
             ctx.fill();
             
-            ctx.fillStyle = color;
+            // Wings
+            ctx.fillStyle = wingColor;
             if (wingUp) {
                 ctx.beginPath();
-                ctx.moveTo(x + 15, y + 8);
-                ctx.lineTo(x + 5, y - 8);
-                ctx.lineTo(x + 18, y + 10);
+                ctx.moveTo(x + 15, y + 10);
+                ctx.quadraticCurveTo(x + 5, y - 12, x + 2, y - 5);
+                ctx.lineTo(x + 18, y + 12);
                 ctx.closePath();
                 ctx.fill();
                 
                 ctx.beginPath();
-                ctx.moveTo(x + 25, y + 8);
-                ctx.lineTo(x + 35, y - 8);
-                ctx.lineTo(x + 28, y + 10);
+                ctx.moveTo(x + 25, y + 10);
+                ctx.quadraticCurveTo(x + 35, y - 12, x + 38, y - 5);
+                ctx.lineTo(x + 28, y + 12);
                 ctx.closePath();
                 ctx.fill();
             } else {
                 ctx.beginPath();
-                ctx.moveTo(x + 15, y + 16);
-                ctx.lineTo(x + 5, y + 24);
-                ctx.lineTo(x + 18, y + 14);
+                ctx.moveTo(x + 15, y + 14);
+                ctx.quadraticCurveTo(x + 5, y + 28, x + 2, y + 22);
+                ctx.lineTo(x + 18, y + 12);
                 ctx.closePath();
                 ctx.fill();
                 
                 ctx.beginPath();
-                ctx.moveTo(x + 25, y + 16);
-                ctx.lineTo(x + 35, y + 24);
-                ctx.lineTo(x + 28, y + 14);
+                ctx.moveTo(x + 25, y + 14);
+                ctx.quadraticCurveTo(x + 35, y + 28, x + 38, y + 22);
+                ctx.lineTo(x + 28, y + 12);
                 ctx.closePath();
                 ctx.fill();
             }
             
+            // Tail
+            ctx.fillStyle = bodyColor;
             ctx.beginPath();
-            ctx.moveTo(x + 10, y + 12);
-            ctx.lineTo(x, y + 10);
-            ctx.lineTo(x + 10, y + 10);
+            ctx.moveTo(x + 8, y + 12);
+            ctx.lineTo(x, y + 14);
+            ctx.lineTo(x + 2, y + 10);
+            ctx.lineTo(x + 8, y + 10);
             ctx.closePath();
             ctx.fill();
             
-            ctx.strokeStyle = color;
+            // Legs
+            ctx.strokeStyle = bodyColor;
             ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.moveTo(x + 15, y + 16);
-            ctx.lineTo(x + 13, y + 20);
-            ctx.moveTo(x + 25, y + 16);
-            ctx.lineTo(x + 23, y + 20);
+            ctx.moveTo(x + 16, y + 18);
+            ctx.lineTo(x + 14, y + 24);
+            ctx.moveTo(x + 24, y + 18);
+            ctx.lineTo(x + 22, y + 24);
             ctx.stroke();
+        }
+
+        function drawSpeedometer() {
+            if (!canFly) return;
+            
+            // Calculate speed in MPH (simulate based on movement)
+            flightSpeedMPH = Math.min(3000, (gameSpeed - INITIAL_SPEED) * 150 + 100);
+            const mach = (flightSpeedMPH / 767).toFixed(2);
+            
+            // Speedometer background
+            ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+            ctx.fillRect(10, 10, 150, 60);
+            
+            // Border
+            ctx.strokeStyle = "#FF8C00";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(10, 10, 150, 60);
+            
+            // Speed text
+            ctx.fillStyle = "#FF8C00";
+            ctx.font = "bold 16px Courier";
+            ctx.textAlign = "left";
+            ctx.fillText("SPEED", 20, 30);
+            
+            ctx.fillStyle = mach >= 3 ? "#FF0000" : "#00FF00";
+            ctx.font = "bold 20px Courier";
+            ctx.fillText(Math.floor(flightSpeedMPH) + " MPH", 20, 50);
+            
+            // Mach number
+            ctx.fillStyle = mach >= 3 ? "#FF0000" : "#FFFFFF";
+            ctx.font = "bold 14px Courier";
+            ctx.fillText("MACH " + mach, 20, 65);
         }
 
         const dino = {
             x: 50,
             y: GROUND_Y,
-            width: 60,
+            width: 65,
             height: 47,
             dy: 0,
             isJumping: false,
@@ -465,6 +607,14 @@
 
                 if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
                     ctx.restore();
+                }
+                
+                // Flight enabled text
+                if (canFly) {
+                    ctx.fillStyle = "#FF8C00";
+                    ctx.font = "bold 16px Courier";
+                    ctx.textAlign = "left";
+                    ctx.fillText("FLIGHT ENABLED!", this.x - 20, this.y - 15);
                 }
             },
 
@@ -515,8 +665,8 @@
                 this.type = Math.random() > 0.7 ? 'pterodactyl' : 'cactus';
                 
                 if (this.type === 'pterodactyl') {
-                    this.width = 46;
-                    this.height = 30;
+                    this.width = 48;
+                    this.height = 32;
                     this.y = GROUND_Y - 40 - Math.random() * 30;
                 } else {
                     this.width = 36;
@@ -541,7 +691,7 @@
             }
 
             collidesWith(dino) {
-                const margin = this.type === 'pterodactyl' ? 8 : 5;
+                const margin = this.type === 'pterodactyl' ? 10 : 8;
                 return (
                     dino.x < this.x + this.width - margin &&
                     dino.x + dino.width - margin > this.x &&
@@ -559,189 +709,3 @@
             ctx.moveTo(0, GROUND_Y + 47);
             ctx.lineTo(canvas.width, GROUND_Y + 47);
             ctx.stroke();
-            
-            ctx.fillStyle = sky.isDark ? '#666' : '#8B7355';
-            for (let i = 0; i < canvas.width; i += 20) {
-                ctx.fillRect(i + (frameCount % 20), GROUND_Y + 50, 2, 2);
-            }
-        }
-
-        function drawScore() {
-            const displayScore = Math.floor(score);
-            const sky = getSkyColor();
-            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
-            ctx.font = 'bold 18px Courier';
-            ctx.textAlign = 'right';
-            ctx.fillText('HI ' + String(Math.floor(highScore)).padStart(5, '0'), canvas.width - 10, 30);
-            ctx.fillText(String(displayScore).padStart(5, '0'), canvas.width - 10, 55);
-        }
-
-        function drawGameOver() {
-            const sky = getSkyColor();
-            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
-            ctx.font = 'bold 28px Courier';
-            ctx.textAlign = 'center';
-            ctx.fillText('G A M E  O V E R', canvas.width / 2, canvas.height / 2 - 20);
-            ctx.font = '18px Courier';
-            ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 15);
-        }
-
-        function drawStartMessage() {
-            const sky = getSkyColor();
-            ctx.fillStyle = sky.isDark ? '#FFF' : '#000';
-            ctx.font = '18px Courier';
-            ctx.textAlign = 'center';
-            ctx.fillText('Press SPACE or Click to Start', canvas.width / 2, canvas.height / 2);
-        }
-
-        function spawnObstacle() {
-            const difficultyMultiplier = Math.max(0.4, 1 - (score / 3000));
-            const adjustedMinDistance = OBSTACLE_MIN_DISTANCE * difficultyMultiplier;
-            const adjustedMaxDistance = OBSTACLE_MAX_DISTANCE * difficultyMultiplier;
-            const doubleObstacleChance = Math.min(0.3, score / 10000);
-            const shouldSpawnDouble = Math.random() < doubleObstacleChance;
-
-            if (obstacles.length === 0) {
-                nextObstacleDistance--;
-                if (nextObstacleDistance <= 0) {
-                    obstacles.push(new Obstacle());
-                    if (shouldSpawnDouble && score > 500) {
-                        setTimeout(() => obstacles.push(new Obstacle()), 100);
-                    }
-                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
-                }
-            } else {
-                const lastObstacle = obstacles[obstacles.length - 1];
-                if (canvas.width - lastObstacle.x > nextObstacleDistance) {
-                    obstacles.push(new Obstacle());
-                    if (shouldSpawnDouble && score > 500) {
-                        setTimeout(() => obstacles.push(new Obstacle()), 100);
-                    }
-                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
-                }
-            }
-        }
-
-        function checkCollisions() {
-            if (isInvincible) return;
-
-            for (let obstacle of obstacles) {
-                if (obstacle.collidesWith(dino)) {
-                    gameOver();
-                    break;
-                }
-            }
-        }
-
-        function gameOver() {
-            isGameOver = true;
-            playSound('death');
-            
-            if (score > highScore) {
-                highScore = score;
-                localStorage.setItem('dinoHighScore', Math.floor(highScore));
-            }
-        }
-
-        function resetGame() {
-            score = 0;
-            gameSpeed = INITIAL_SPEED;
-            isGameOver = false;
-            gameStarted = false;
-            obstacles = [];
-            frameCount = 0;
-            dino.y = GROUND_Y;
-            dino.dy = 0;
-            dino.isJumping = false;
-            dino.targetY = GROUND_Y;
-            nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
-            canFly = false;
-            isInvincible = false;
-            spaceCount = 0;
-            tapCount = 0;
-            showCheatMessage = false;
-            cheatMessageTimer = 0;
-            lastMilestoneScore = 0;
-            keysPressed = { up: false, down: false };
-            
-            cancelAnimationFrame(animationFrameId);
-            animate();
-        }
-
-        function animate() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            updateDayNightCycle();
-            drawSky();
-            drawCelestialBodies();
-            drawMountains();
-            drawGround();
-
-            if (!gameStarted) {
-                dino.draw();
-                drawStartMessage();
-                animationFrameId = requestAnimationFrame(animate);
-                return;
-            }
-
-            if (isGameOver) {
-                dino.draw();
-                obstacles.forEach(obs => obs.update());
-                drawScore();
-                drawGameOver();
-                return;
-            }
-
-            if (gameSpeed < MAX_SPEED) {
-                gameSpeed += SPEED_INCREMENT;
-            }
-
-            if (canFly) {
-                score += 250 / 60;
-            } else {
-                score += 100 / 120;
-            }
-
-            const currentScore = Math.floor(score);
-            
-            if (currentScore > 0 && currentScore !== lastMilestoneScore) {
-                if (currentScore % 10000 === 0) {
-                    playSound('noice');
-                    lastMilestoneScore = currentScore;
-                } else if (currentScore % 1000 === 0) {
-                    playSound('applause');
-                    lastMilestoneScore = currentScore;
-                } else if (currentScore % 100 === 0) {
-                    playSound('ding');
-                    lastMilestoneScore = currentScore;
-                }
-            }
-
-            dino.update();
-
-            spawnObstacle();
-            obstacles = obstacles.filter(obs => {
-                obs.update();
-                return obs.x > -obs.width;
-            });
-
-            checkCollisions();
-            drawScore();
-
-            frameCount++;
-            animationFrameId = requestAnimationFrame(animate);
-        }
-
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                e.preventDefault();
-                
-                if (!gameStarted) {
-                    gameStarted = true;
-                    return;
-                }
-
-                if (isGameOver) return;
-
-                const now = Date.now();
-                if (now -
