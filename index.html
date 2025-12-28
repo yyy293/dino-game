@@ -2,17 +2,21 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Dino Warp: Night Flight Edition</title>
+    <title>Dino Warp: Hyperspace Edition</title>
     <style>
-        body { margin: 0; background: #222; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
-        #container { position: relative; width: 800px; height: 350px; background: #f7f7f7; border-bottom: 4px solid #535353; overflow: hidden; transition: background 1s; }
+        body { margin: 0; background: #0b0b1a; overflow: hidden; font-family: 'Courier New', monospace; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        #container { position: relative; width: 800px; height: 350px; background: #708090; border-bottom: 6px solid #2d2d44; overflow: hidden; transition: background 2s; }
         canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
-        #audio-hint { position: absolute; top: 10px; left: 10px; font-size: 10px; color: #999; pointer-events: none; z-index: 10; }
+        #gui { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.6); z-index: 20; cursor: pointer; color: white; text-align: center; }
+        .pixel-btn { background: #548d44; padding: 15px 30px; border: 4px solid #fff; font-weight: bold; font-size: 24px; box-shadow: 6px 6px #000; }
     </style>
 </head>
 <body>
-    <div id="container" onclick="unlockAudio()">
-        <div id="audio-hint">CLICK TO SYNC AUDIO</div>
+    <div id="container">
+        <div id="gui" onclick="startOrRestart()">
+            <div class="pixel-btn" id="btn-text">START WARP</div>
+            <p style="margin-top: 15px; font-weight: bold;">CLICK TO UNLOCK AUDIO</p>
+        </div>
         <canvas id="gameCanvas"></canvas>
     </div>
 
@@ -23,162 +27,175 @@
 
         const GROUND_Y = 310;
         const GITHUB_BASE = "https://raw.githubusercontent.com/yyy293/dino-game/main/";
-        
+
         const snd = {
             m1k: new Audio(GITHUB_BASE + "aplausos_2.mp3"),
-            m10k: new Audio(GITHUB_BASE + "-audiotrimmer_adesehy.mp3"),
             lose: new Audio(GITHUB_BASE + "directed-by-robert-b_voI2Z4T.mp3")
         };
 
         let state = {
             started: false, over: false, score: 0, speed: 6,
-            highScore: localStorage.getItem('dinoHS') || 0,
-            frame: 0, m1kPlayed: false, m10kPlayed: false,
-            isDucking: false, audioUnlocked: false, isNight: false
+            frame: 0, m1kPlayed: false, isDucking: false, isNight: false
         };
 
-        const dino = { x: 50, y: GROUND_Y - 44, dy: 0, w: 40, h: 44 };
-        let obstacles = [], stars = [], clouds = [], particles = [];
+        const dino = { x: 50, y: GROUND_Y - 44, dy: 0 };
+        let obstacles = [], stars = [], clouds = [];
 
-        for(let i=0; i<30; i++) stars.push({x: Math.random()*800, y: Math.random()*200, r: Math.random()*1.5});
-        for(let i=0; i<5; i++) clouds.push({x: Math.random()*800, y: 30 + Math.random()*70, s: 0.5, w: 40});
+        // Setup Stars and Clouds
+        for(let i=0; i<50; i++) stars.push({x: Math.random()*800, y: Math.random()*250, r: 1 + Math.random()*2});
+        for(let i=0; i<4; i++) clouds.push({x: Math.random()*800, y: 40 + Math.random()*60, w: 50 + Math.random()*30});
 
-        function unlockAudio() {
-            if (state.audioUnlocked) return;
-            for (let s in snd) { snd[s].play().then(() => { snd[s].pause(); snd[s].currentTime = 0; }).catch(() => {}); }
-            state.audioUnlocked = true;
-            document.getElementById('audio-hint').style.display = 'none';
+        function startOrRestart() {
+            // Firefox Audio Fix
+            for (let s in snd) {
+                snd[s].load();
+                snd[s].play().then(() => { snd[s].pause(); snd[s].currentTime = 0; }).catch(() => {});
+            }
+            
+            state.started = true;
+            state.over = false;
+            state.score = 0;
+            state.speed = 6;
+            state.m1kPlayed = false;
+            obstacles = [];
+            dino.y = GROUND_Y - 44;
+            document.getElementById('gui').style.display = 'none';
         }
 
-        // --- PIXEL DRAWING ---
-        function drawDino(x, y, isDucking, color) {
-            ctx.fillStyle = color;
+        function drawDino(x, y, isDucking) {
+            ctx.fillStyle = "#548d44"; // Dino Green
             if (isDucking) {
                 ctx.fillRect(x, y + 20, 55, 20); // Body
                 ctx.fillRect(x + 45, y + 10, 15, 12); // Head
+                ctx.fillStyle = "#fff"; ctx.fillRect(x + 52, y + 13, 3, 3); // Eye
             } else {
-                ctx.fillRect(x + 20, y, 20, 15);     // Head
-                ctx.fillRect(x + 10, y + 12, 25, 22); // Body
-                ctx.fillRect(x, y + 15, 10, 15);     // Tail
-                let leg = Math.floor(state.frame / 8) % 2 === 0 ? 0 : 5;
-                ctx.fillRect(x + 12, y + 34, 6, 10); 
-                ctx.fillRect(x + 25, y + 34, 6, 10);
+                ctx.fillRect(x + 18, y, 22, 18); // Head
+                ctx.fillStyle = "#d0f0c0"; ctx.fillRect(x + 10, y + 15, 25, 22); // Belly
+                ctx.fillStyle = "#548d44"; ctx.fillRect(x + 10, y + 15, 15, 22); // Back
+                ctx.fillRect(x, y + 18, 10, 12); // Tail
+                ctx.fillStyle = "#fff"; ctx.fillRect(x + 32, y + 4, 4, 4); // Eye
+                let leg = Math.floor(state.frame / 6) % 2 === 0 ? 0 : 5;
+                ctx.fillStyle = "#3a6330"; 
+                ctx.fillRect(x + 12, y + 36 + leg, 7, 8);
+                ctx.fillRect(x + 26, y + 36 - leg, 7, 8);
             }
         }
 
-        function drawPtero(x, y, frame, color) {
-            ctx.fillStyle = color;
-            ctx.fillRect(x + 10, y, 20, 10); // Body
-            ctx.fillRect(x + 30, y - 5, 10, 8); // Head
-            let flap = Math.floor(frame / 10) % 2 === 0 ? -15 : 15;
-            ctx.fillRect(x, y + (flap < 0 ? flap : 0), 12, Math.abs(flap)); // Left Wing
-            ctx.fillRect(x + 28, y + (flap < 0 ? flap : 0), 12, Math.abs(flap)); // Right Wing
+        function drawPtero(x, y) {
+            ctx.fillStyle = "#4a3b37"; 
+            ctx.fillRect(x + 10, y, 25, 10);
+            ctx.fillStyle = "#c04040"; 
+            ctx.fillRect(x + 35, y - 5, 12, 6); // Beak
+            let flap = Math.sin(state.frame * 0.2) * 20;
+            ctx.fillRect(x + 5, y + (flap < 0 ? flap : 0), 12, Math.abs(flap) + 5);
+        }
+
+        function drawCactus(x, y) {
+            ctx.fillStyle = "#76a969";
+            ctx.fillRect(x + 8, y, 10, 40);
+            ctx.fillRect(x, y + 15, 26, 5); // Arms cross
+            ctx.fillRect(x, y + 5, 5, 12);
+            ctx.fillRect(x + 21, y + 5, 5, 12);
         }
 
         function update() {
+            if (!state.started || state.over) return;
             state.frame++;
-            state.score += 0.15;
+            state.score += 0.2;
             state.isNight = Math.floor(state.score / 500) % 2 === 1;
 
-            if (state.score >= 1000 && !state.m1kPlayed) { snd.m1k.play(); state.m1kPlayed = true; }
-            
+            if (state.score >= 1000 && !state.m1kPlayed) {
+                snd.m1k.play().catch(()=>{});
+                state.m1kPlayed = true;
+            }
+
             dino.dy += 0.8;
             dino.y += dino.dy;
             let curH = state.isDucking ? 25 : 44;
             if (dino.y > GROUND_Y - curH) { dino.y = GROUND_Y - curH; dino.dy = 0; }
             
-            state.speed += 0.001;
+            // INCREASE SPEED FASTER
+            state.speed += 0.002;
 
-            // Spawn Obstacles (Cactus or Ptero)
-            if (state.frame % Math.max(45, Math.floor(700/state.speed)) === 0) {
-                let type = (state.score > 500 && Math.random() > 0.6) ? 'ptero' : 'cactus';
-                if (type === 'ptero') {
-                    // Pteros can be high (jump) or low (duck)
-                    let pteroY = Math.random() > 0.5 ? GROUND_Y - 80 : GROUND_Y - 35;
-                    obstacles.push({x: 850, y: pteroY, w: 40, h: 20, type: 'ptero'});
-                } else {
-                    obstacles.push({x: 850, y: GROUND_Y - 40, w: 25, h: 40, type: 'cactus'});
-                }
+            // Move Clouds
+            clouds.forEach(c => {
+                c.x -= state.speed * 0.2;
+                if(c.x < -100) c.x = 850;
+            });
+
+            // Move Stars and Warp Effect
+            stars.forEach(s => {
+                s.x -= state.speed * 0.5;
+                if(s.x < -20) s.x = 820;
+            });
+
+            if (state.frame % Math.max(30, Math.floor(600/state.speed)) === 0) {
+                let type = (state.score > 400 && Math.random() > 0.6) ? 'ptero' : 'cactus';
+                let obsY = (type === 'ptero' && Math.random() > 0.5) ? GROUND_Y - 85 : GROUND_Y - 40;
+                obstacles.push({x: 850, y: obsY, w: 30, h: 40, type: type});
             }
 
-            obstacles.forEach((o, i) => {
+            obstacles.forEach(o => {
                 o.x -= state.speed;
-                // Collision
                 let dW = state.isDucking ? 55 : 35;
-                let dH = state.isDucking ? 25 : 44;
-                if (dino.x < o.x + o.w && dino.x + dW > o.x && dino.y < o.y + o.h && dino.y + dH > o.y) endGame();
+                if (dino.x < o.x + o.w && dino.x + dW > o.x && dino.y < o.y + o.h && dino.y + 44 > o.y) {
+                    state.over = true;
+                    snd.lose.play().catch(()=>{});
+                    document.getElementById('gui').style.display = 'flex';
+                    document.getElementById('btn-text').innerText = "RESTART";
+                }
             });
             obstacles = obstacles.filter(o => o.x > -100);
         }
 
-        function endGame() {
-            state.over = true;
-            snd.lose.play();
-            if (state.score > state.highScore) {
-                state.highScore = Math.floor(state.score);
-                localStorage.setItem('dinoHS', state.highScore);
-            }
-        }
-
         function draw() {
-            ctx.fillStyle = state.isNight ? "#202124" : "#f7f7f7";
+            ctx.fillStyle = state.isNight ? "#12122b" : "#f7f7f7";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            let mainColor = state.isNight ? "#ddd" : "#535353";
+            let color = state.isNight ? "#fff" : "#535353";
 
-            if (state.isNight) {
-                ctx.fillStyle = "#555";
-                stars.forEach(s => ctx.fillRect(s.x, s.y, s.r, s.r));
-            }
+            // Draw Clouds
+            ctx.fillStyle = state.isNight ? "#2d2d44" : "#e0e0e0";
+            clouds.forEach(c => {
+                ctx.fillRect(c.x, c.y, c.w, 15);
+                ctx.fillRect(c.x + 10, c.y - 10, c.w - 20, 10);
+            });
 
-            ctx.strokeStyle = mainColor;
-            ctx.beginPath(); ctx.moveTo(0, GROUND_Y); ctx.lineTo(800, GROUND_Y); ctx.stroke();
-
-            drawDino(dino.x, dino.y, state.isDucking, mainColor);
-
-            obstacles.forEach(o => {
-                if (o.type === 'ptero') drawPtero(o.x, o.y, state.frame, mainColor);
-                else {
-                    ctx.fillStyle = mainColor;
-                    ctx.fillRect(o.x, o.y, o.w, o.h); // Cactus
+            // Draw Stars with WARP BEAM effect
+            ctx.fillStyle = "#fff";
+            let beamLength = Math.max(0, (state.speed - 8) * 5); // Beams start when speed > 8
+            stars.forEach(s => {
+                if (state.isNight || state.speed > 12) {
+                    ctx.fillRect(s.x, s.y, 2 + beamLength, 2);
                 }
             });
 
-            ctx.fillStyle = mainColor;
-            ctx.font = "18px Courier New";
-            ctx.textAlign = "right";
-            ctx.fillText(`${Math.floor(state.score).toString().padStart(5, '0')}`, 780, 40);
+            ctx.fillStyle = state.isNight ? "#0b0b1a" : "#535353";
+            ctx.fillRect(0, GROUND_Y, 800, 40); // Ground
 
-            if (state.over) {
-                ctx.fillStyle = "rgba(0,0,0,0.8)";
-                ctx.fillRect(0,0,800,350);
-                ctx.fillStyle = "#fff"; ctx.textAlign = "center";
-                ctx.fillText("GAME OVER - PRESS R", 400, 175);
-            }
+            drawDino(dino.x, dino.y, state.isDucking);
+            obstacles.forEach(o => {
+                if (o.type === 'ptero') drawPtero(o.x, o.y);
+                else drawCactus(o.x, o.y);
+            });
+
+            ctx.fillStyle = color;
+            ctx.font = "bold 20px Courier New";
+            ctx.fillText(Math.floor(state.score).toString().padStart(5, '0'), 720, 40);
         }
 
-        function gameLoop() {
-            if (!state.over) {
-                if (state.started) update();
-                draw();
-            }
-            requestAnimationFrame(gameLoop);
+        function loop() {
+            update();
+            draw();
+            requestAnimationFrame(loop);
         }
 
         window.addEventListener('keydown', e => {
-            unlockAudio();
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                if (!state.started) state.started = true;
-                if (dino.y >= GROUND_Y - 45) dino.dy = -13;
-            }
+            if ((e.code === 'Space' || e.code === 'ArrowUp') && dino.y >= GROUND_Y - 45) dino.dy = -13;
             if (e.code === 'ArrowDown') state.isDucking = true;
-            if (e.code === 'KeyR' && state.over) location.reload();
         });
+        window.addEventListener('keyup', e => { if (e.code === 'ArrowDown') state.isDucking = false; });
 
-        window.addEventListener('keyup', e => {
-            if (e.code === 'ArrowDown') state.isDucking = false;
-        });
-
-        gameLoop();
+        loop();
     </script>
 </body>
 </html>
