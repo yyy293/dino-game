@@ -3,36 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Dino Game</title>
+    <title>Dino Game - Noice Edition</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        /* All your original styling + Night Mode support */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
-            display: flex;
-            flex-direction: column;
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            background-color: #f7f7f7; 
-            font-family: 'Courier New', Courier, monospace; 
-            overflow: hidden; 
-            touch-action: none; 
+            display: flex; flex-direction: column; justify-content: center; align-items: center; 
+            min-height: 100vh; background-color: #f7f7f7; font-family: 'Courier New', Courier, monospace; 
+            overflow: hidden; touch-action: none; transition: background-color 0.5s;
         }
+        body.night { background-color: #202124; }
         #container { 
-            position: relative; 
-            width: 800px; 
-            height: 200px; 
-            background-color: #fff; 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: relative; width: 800px; height: 200px; 
+            background-color: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            transition: background-color 0.5s;
         }
-        canvas { 
-            display: block; 
-            width: 100%;
-            height: 100%;
-        }
+        body.night #container { background-color: #202124; }
+        canvas { display: block; width: 100%; height: 100%; }
     </style>
 </head>
 <body>
@@ -45,15 +32,12 @@
         canvas.width = 800;
         canvas.height = 200;
 
-        // Game constants
+        // Constants
         const GRAVITY = 0.6;
         const JUMP_FORCE = -11;
         const GROUND_Y = 150;
         const INITIAL_SPEED = 6;
-        const SPEED_INCREMENT = 0.002;
-        const MAX_SPEED = 14;
-        const OBSTACLE_MIN_DISTANCE = 350;
-        const OBSTACLE_MAX_DISTANCE = 700;
+        const SPEED_INCREMENT = 0.0025; // Faster scaling
 
         // Game state
         let gameSpeed = INITIAL_SPEED;
@@ -64,674 +48,186 @@
         let obstacles = [];
         let frameCount = 0;
         let animationFrameId;
-        let nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
+        let isNight = false;
+        
+        // Noice Meme Logic
+        let showNoice = false;
+        let noiceTimer = 0;
 
-        // Custom additions
+        // Cheats
         let canFly = false;
         let isInvincible = false;
         let spaceCount = 0;
         let lastSpaceTime = 0;
-        let tapCount = 0;
-        let lastTapTime = 0;
-        let showCheatMessage = false;
-        let cheatMessageTimer = 0;
-        let flightSpeed = 4;
         let lastMilestoneScore = 0;
+        let keysPressed = { up: false, down: false };
 
-        // Arrow key state for smoother continuous movement
-        let keysPressed = {
-            up: false,
-            down: false
-        };
-
-        // Load images
-        let dinoLoaded = false;
-        let cactusLoaded = false;
-
-        const dinoImg = new Image();
-        dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
-        dinoImg.onload = () => {
-            dinoLoaded = true;
-            console.log('✓ Dino image loaded successfully');
-        };
-        dinoImg.onerror = () => {
-            console.log('✗ Dino image failed to load, using fallback graphics');
-        };
-
-        const cactusImg = new Image();
-        cactusImg.src = 'Screenshot_2025-12-27-14-52-08-378_com.android.chrome-edit.jpg';
-        cactusImg.onload = () => {
-            cactusLoaded = true;
-            console.log('✓ Cactus image loaded successfully');
-        };
-        cactusImg.onerror = () => {
-            console.log('✗ Cactus image failed to load, using fallback graphics');
-        };
-
-        // Audio context
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
         function playSound(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const now = audioCtx.currentTime;
-
-            if (type === 'jump') {
-                const osc = audioCtx.createOscillator();
-                const g = audioCtx.createGain();
+            const osc = audioCtx.createOscillator();
+            const g = audioCtx.createGain();
+            
+            if (type === 'noice') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(450, now + 0.1);
+                g.gain.setValueAtTime(0.2, now);
+                g.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+            } else if (type === 'jump') {
                 osc.type = 'square';
-                osc.frequency.setValueAtTime(200, now);
-                osc.frequency.exponentialRampToValueAtTime(800, now + 0.05);
-                g.gain.setValueAtTime(0.08, now);
-                g.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
-                osc.connect(g);
-                g.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(now + 0.1);
-            } else if (type === 'death') {
-                const notes = [{f:100,s:0,d:0.5},{f:95,s:0.55,d:0.5},{f:80,s:1.1,d:1.5}];
-                notes.forEach(n => {
-                    const filter = audioCtx.createBiquadFilter();
-                    filter.type = "lowpass";
-                    filter.frequency.setValueAtTime(800, now + n.s);
-                    filter.frequency.exponentialRampToValueAtTime(50, now + n.s + n.d);
-                    filter.connect(audioCtx.destination);
-
-                    ['sawtooth', 'triangle', 'sine', 'square'].forEach((t, i) => {
-                        const osc = audioCtx.createOscillator();
-                        const g = audioCtx.createGain();
-                        osc.type = t;
-                        let freq = i === 2 ? n.f/2 : (i === 3 ? n.f/4 : n.f);
-                        osc.frequency.setValueAtTime(freq, now + n.s);
-                        g.gain.setValueAtTime(0, now + n.s);
-                        g.gain.linearRampToValueAtTime(0.25, now + n.s + 0.05);
-                        g.gain.exponentialRampToValueAtTime(0.001, now + n.s + n.d);
-                        osc.connect(g);
-                        g.connect(filter);
-                        osc.start(now + n.s);
-                        osc.stop(now + n.s + n.d);
-                    });
-                });
-            } else if (type === 'ding') {
-                const osc = audioCtx.createOscillator();
-                const g = audioCtx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(800, now);
-                osc.frequency.exponentialRampToValueAtTime(1200, now + 0.1);
-                g.gain.setValueAtTime(0.15, now);
-                g.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-                osc.connect(g);
-                g.connect(audioCtx.destination);
-                osc.start();
-                osc.stop(now + 0.2);
-            } else if (type === 'applause') {
-                // Realistic crowd applause with multiple clap patterns
-                const duration = 2.5;
-                const numPeople = 80;
-                
-                for (let person = 0; person < numPeople; person++) {
-                    const startDelay = Math.random() * 0.3;
-                    const clapRate = 0.15 + Math.random() * 0.1; // Time between claps
-                    const numClaps = 12 + Math.floor(Math.random() * 8);
-                    
-                    for (let clap = 0; clap < numClaps; clap++) {
-                        const clapTime = startDelay + (clap * clapRate);
-                        if (clapTime > duration) break;
-                        
-                        // Create individual clap sound
-                        const noise = audioCtx.createBufferSource();
-                        const buffer = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.03, audioCtx.sampleRate);
-                        const data = buffer.getChannelData(0);
-                        
-                        // Sharp attack for clap sound
-                        for (let j = 0; j < data.length; j++) {
-                            const envelope = Math.exp(-j / (audioCtx.sampleRate * 0.01));
-                            data[j] = (Math.random() * 2 - 1) * envelope;
-                        }
-                        noise.buffer = buffer;
-                        
-                        // Filter to make it sound like hands clapping
-                        const filter = audioCtx.createBiquadFilter();
-                        filter.type = "bandpass";
-                        filter.frequency.value = 800 + Math.random() * 1500;
-                        filter.Q.value = 2;
-                        
-                        const g = audioCtx.createGain();
-                        const volume = 0.015 + Math.random() * 0.015;
-                        g.gain.setValueAtTime(volume, now + clapTime);
-                        g.gain.exponentialRampToValueAtTime(0.001, now + clapTime + 0.03);
-                        
-                        // Panning for spatial effect
-                        const panner = audioCtx.createStereoPanner();
-                        panner.pan.value = (Math.random() * 2 - 1) * 0.8;
-                        
-                        noise.connect(filter);
-                        filter.connect(panner);
-                        panner.connect(g);
-                        g.connect(audioCtx.destination);
-                        noise.start(now + clapTime);
-                    }
-                }
-                
-                // Add some whoops and cheers
-                for (let i = 0; i < 5; i++) {
-                    const delay = 0.2 + Math.random() * 1.5;
-                    const osc = audioCtx.createOscillator();
-                    const g = audioCtx.createGain();
-                    
-                    osc.type = 'sine';
-                    osc.frequency.setValueAtTime(300 + Math.random() * 400, now + delay);
-                    osc.frequency.exponentialRampToValueAtTime(500 + Math.random() * 300, now + delay + 0.2);
-                    
-                    g.gain.setValueAtTime(0, now + delay);
-                    g.gain.linearRampToValueAtTime(0.03, now + delay + 0.02);
-                    g.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.2);
-                    
-                    osc.connect(g);
-                    g.connect(audioCtx.destination);
-                    osc.start(now + delay);
-                    osc.stop(now + delay + 0.2);
-                }
-            } else if (type === 'noice') {
-                // "Noice" meme sound - distinctive two-syllable sound
-                // First part: "Noi" (lower, nasal)
-                const osc1 = audioCtx.createOscillator();
-                const g1 = audioCtx.createGain();
-                const filter1 = audioCtx.createBiquadFilter();
-                
-                filter1.type = "bandpass";
-                filter1.frequency.value = 800;
-                filter1.Q.value = 5;
-                
-                osc1.type = 'sawtooth';
-                osc1.frequency.setValueAtTime(250, now);
-                osc1.frequency.linearRampToValueAtTime(280, now + 0.12);
-                
-                g1.gain.setValueAtTime(0, now);
-                g1.gain.linearRampToValueAtTime(0.25, now + 0.02);
-                g1.gain.setValueAtTime(0.25, now + 0.12);
-                g1.gain.exponentialRampToValueAtTime(0.001, now + 0.18);
-                
-                osc1.connect(filter1);
-                filter1.connect(g1);
-                g1.connect(audioCtx.destination);
-                osc1.start(now);
-                osc1.stop(now + 0.18);
-                
-                // Second part: "ce" (higher, crisp)
-                const osc2 = audioCtx.createOscillator();
-                const g2 = audioCtx.createGain();
-                const filter2 = audioCtx.createBiquadFilter();
-                
-                filter2.type = "highpass";
-                filter2.frequency.value = 1200;
-                filter2.Q.value = 2;
-                
-                osc2.type = 'sawtooth';
-                osc2.frequency.setValueAtTime(450, now + 0.12);
-                osc2.frequency.linearRampToValueAtTime(400, now + 0.35);
-                
-                g2.gain.setValueAtTime(0, now + 0.12);
-                g2.gain.linearRampToValueAtTime(0.28, now + 0.14);
-                g2.gain.setValueAtTime(0.28, now + 0.3);
-                g2.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-                
-                osc2.connect(filter2);
-                filter2.connect(g2);
-                g2.connect(audioCtx.destination);
-                osc2.start(now + 0.12);
-                osc2.stop(now + 0.45);
-                
-                // Add overtones for richness
-                const osc3 = audioCtx.createOscillator();
-                const g3 = audioCtx.createGain();
-                osc3.type = 'sine';
-                osc3.frequency.setValueAtTime(500, now);
-                osc3.frequency.linearRampToValueAtTime(560, now + 0.12);
-                osc3.frequency.linearRampToValueAtTime(800, now + 0.35);
-                g3.gain.setValueAtTime(0.08, now);
-                g3.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
-                osc3.connect(g3);
-                g3.connect(audioCtx.destination);
-                osc3.start(now);
-                osc3.stop(now + 0.45);
+                osc.frequency.setValueAtTime(150, now);
+                osc.frequency.linearRampToValueAtTime(600, now + 0.1);
+                g.gain.setValueAtTime(0.05, now);
             }
+            
+            osc.connect(g); g.connect(audioCtx.destination);
+            osc.start(); osc.stop(now + 0.3);
         }
 
-        // Fallback drawing functions
-        function drawDino(x, y, width, height, legFrame) {
-            ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
-            
-            ctx.fillRect(x + 20, y, 22, 22);
-            ctx.fillRect(x + 35, y + 10, 7, 12);
-            ctx.fillRect(x + 35, y + 2, 15, 10);
-            ctx.fillStyle = "#fff";
-            ctx.fillRect(x + 45, y + 4, 3, 3);
-            
-            ctx.fillStyle = isInvincible ? "#f39c12" : (canFly ? "#3498db" : "#535353");
-            ctx.fillRect(x + 10, y + 18, 12, 4);
-            ctx.fillRect(x, y + 16, 12, 4);
-            
-            if (legFrame === 0) {
-                ctx.fillRect(x + 20, y + 22, 6, 10);
-                ctx.fillRect(x + 30, y + 22, 6, 10);
-            } else {
-                ctx.fillRect(x + 22, y + 22, 6, 10);
-                ctx.fillRect(x + 28, y + 22, 6, 10);
-            }
-        }
-
-        function drawCactus(x, y, width, height) {
-            ctx.fillStyle = "#535353";
-            ctx.fillRect(x + 10, y, 10, height);
-            ctx.fillRect(x, y + 10, 10, 15);
-            ctx.fillRect(x, y + 10, 4, 20);
-            ctx.fillRect(x + 20, y + 15, 10, 15);
-            ctx.fillRect(x + 26, y + 15, 4, 20);
-        }
-
-        // Dino object
         const dino = {
-            x: 50,
-            y: GROUND_Y,
-            width: 44,
-            height: 47,
-            dy: 0,
-            isJumping: false,
-            legFrame: 0,
-            targetY: GROUND_Y,
-            
+            x: 50, y: GROUND_Y, width: 44, height: 47, dy: 0,
+            isJumping: false, legFrame: 0, targetY: GROUND_Y,
             draw() {
-                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
-                    ctx.save();
-                    ctx.globalAlpha = 0.6;
-                }
-
-                if (dinoLoaded) {
-                    ctx.drawImage(dinoImg, this.x, this.y, this.width, this.height);
-                } else {
-                    drawDino(this.x, this.y, this.width, this.height, this.legFrame);
-                }
-
-                if (isInvincible && Math.floor(frameCount / 8) % 2 === 0) {
-                    ctx.restore();
-                }
-
-                if (canFly || isInvincible) {
-                    ctx.fillStyle = isInvincible ? "#f39c12" : "orange";
-                    ctx.font = "bold 14px Courier";
-                    ctx.textAlign = "left";
-                    if (isInvincible) {
-                        ctx.fillText("INVINCIBLE", this.x - 15, this.y - 10);
-                    } else if (canFly) {
-                        ctx.fillText("FLIGHT ENABLED", this.x - 15, this.y - 10);
-                    }
-                }
+                const color = isNight ? "#DDD" : "#535353";
+                ctx.fillStyle = isInvincible ? "#FFD700" : color;
+                // Simple Dino shape
+                ctx.fillRect(this.x, this.y, 40, 40); 
+                // Draw eyes/head detail
+                ctx.fillStyle = isNight ? "#000" : "#FFF";
+                ctx.fillRect(this.x + 25, this.y + 5, 5, 5);
             },
-
             update() {
                 if (canFly) {
-                    if (keysPressed.up) {
-                        this.targetY = Math.max(20, this.targetY - flightSpeed);
-                    }
-                    if (keysPressed.down) {
-                        this.targetY = Math.min(GROUND_Y, this.targetY + flightSpeed);
-                    }
-                    
-                    const diff = this.targetY - this.y;
-                    this.y += diff * 0.3;
-                    this.dy = 0;
+                    if (keysPressed.up) this.targetY = Math.max(20, this.targetY - 5);
+                    if (keysPressed.down) this.targetY = Math.min(GROUND_Y, this.targetY + 5);
+                    this.y += (this.targetY - this.y) * 0.2;
                 } else {
                     this.dy += GRAVITY;
                     this.y += this.dy;
-
-                    if (this.y >= GROUND_Y) {
-                        this.y = GROUND_Y;
-                        this.dy = 0;
-                        this.isJumping = false;
-                    }
+                    if (this.y >= GROUND_Y) { this.y = GROUND_Y; this.dy = 0; this.isJumping = false; }
                 }
-
-                if (this.y >= GROUND_Y && gameStarted && !isGameOver) {
-                    if (frameCount % 6 === 0) {
-                        this.legFrame = 1 - this.legFrame;
-                    }
-                }
-
                 this.draw();
-            },
-
-            jump() {
-                if (!canFly && !this.isJumping && this.y >= GROUND_Y && !isGameOver && gameStarted) {
-                    this.dy = JUMP_FORCE;
-                    this.isJumping = true;
-                    playSound('jump');
-                }
             }
         };
 
-        // Obstacle class
         class Obstacle {
-            constructor() {
-                this.x = canvas.width;
-                this.width = 30;
-                this.height = 45;
-                this.y = GROUND_Y + (47 - this.height);
-                
-                // Randomly make some obstacles taller/wider for variety
-                if (Math.random() > 0.7) {
-                    this.height = 50 + Math.floor(Math.random() * 15);
-                    this.y = GROUND_Y + (47 - this.height);
-                }
+            constructor(xOffset = 0) {
+                this.x = canvas.width + xOffset;
+                this.width = 20 + Math.random() * 20;
+                this.height = 30 + Math.random() * 30;
+                this.y = GROUND_Y + (40 - this.height);
             }
-
             update() {
                 this.x -= gameSpeed;
-
-                if (cactusLoaded) {
-                    ctx.drawImage(cactusImg, this.x, this.y, this.width, this.height);
-                } else {
-                    drawCactus(this.x, this.y, this.width, this.height);
-                }
-            }
-
-            collidesWith(dino) {
-                return (
-                    dino.x < this.x + this.width - 5 &&
-                    dino.x + dino.width - 5 > this.x &&
-                    dino.y < this.y + this.height - 5 &&
-                    dino.y + dino.height - 5 > this.y
-                );
+                ctx.fillStyle = isNight ? "#DDD" : "#535353";
+                ctx.fillRect(this.x, this.y, this.width, this.height);
             }
         }
 
-        // Drawing functions
-        function drawGround() {
-            ctx.strokeStyle = '#535353';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(0, GROUND_Y + 47);
-            ctx.lineTo(canvas.width, GROUND_Y + 47);
-            ctx.stroke();
-        }
-
-        function drawScore() {
-            const displayScore = Math.floor(score);
-            ctx.fillStyle = '#535353';
-            ctx.font = '16px Courier';
-            ctx.textAlign = 'right';
-            ctx.fillText('HI ' + String(Math.floor(highScore)).padStart(5, '0'), canvas.width - 10, 30);
-            ctx.fillText(String(displayScore).padStart(5, '0'), canvas.width - 10, 50);
-        }
-
-        function drawGameOver() {
-            ctx.fillStyle = '#535353';
-            ctx.font = 'bold 24px Courier';
-            ctx.textAlign = 'center';
-            ctx.fillText('G A M E  O V E R', canvas.width / 2, canvas.height / 2 - 20);
-            ctx.font = '16px Courier';
-            ctx.fillText('Press R to restart', canvas.width / 2, canvas.height / 2 + 10);
-        }
-
-        function drawStartMessage() {
-            ctx.fillStyle = '#535353';
-            ctx.font = '16px Courier';
-            ctx.textAlign = 'center';
-            ctx.fillText('Press SPACE or Click to Start', canvas.width / 2, canvas.height / 2);
-        }
-
-        // Game logic functions
-        function spawnObstacle() {
-            // Progressive difficulty: more obstacles spawn as score increases
-            const difficultyMultiplier = Math.max(0.4, 1 - (score / 3000));
-            const adjustedMinDistance = OBSTACLE_MIN_DISTANCE * difficultyMultiplier;
-            const adjustedMaxDistance = OBSTACLE_MAX_DISTANCE * difficultyMultiplier;
-
-            // Chance to spawn multiple obstacles close together at higher scores
-            const doubleObstacleChance = Math.min(0.3, score / 10000);
-            const shouldSpawnDouble = Math.random() < doubleObstacleChance;
-
-            if (obstacles.length === 0) {
-                nextObstacleDistance--;
-                if (nextObstacleDistance <= 0) {
-                    obstacles.push(new Obstacle());
-                    if (shouldSpawnDouble && score > 500) {
-                        setTimeout(() => {
-                            obstacles.push(new Obstacle());
-                        }, 100);
-                    }
-                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
+        function spawnManager() {
+            const minGap = Math.max(250, 450 - (score / 15));
+            const last = obstacles[obstacles.length - 1];
+            if (!last || (canvas.width - last.x) > (minGap + Math.random() * 400)) {
+                obstacles.push(new Obstacle());
+                // Double Cacti logic: chance increases with distance
+                if (score > 500 && Math.random() < Math.min(0.4, score/8000)) {
+                    obstacles.push(new Obstacle(40)); 
                 }
-            } else {
-                const lastObstacle = obstacles[obstacles.length - 1];
-                if (canvas.width - lastObstacle.x > nextObstacleDistance) {
-                    obstacles.push(new Obstacle());
-                    if (shouldSpawnDouble && score > 500) {
-                        setTimeout(() => {
-                            obstacles.push(new Obstacle());
-                        }, 100);
-                    }
-                    nextObstacleDistance = adjustedMinDistance + Math.random() * (adjustedMaxDistance - adjustedMinDistance);
-                }
-            }
-        }
-
-        function checkCollisions() {
-            if (isInvincible) return;
-
-            for (let obstacle of obstacles) {
-                if (obstacle.collidesWith(dino)) {
-                    gameOver();
-                    break;
-                }
-            }
-        }
-
-        function gameOver() {
-            isGameOver = true;
-            playSound('death');
-            
-            if (score > highScore) {
-                highScore = score;
-                localStorage.setItem('dinoHighScore', Math.floor(highScore));
-                console.log('🏆 New high score:', Math.floor(highScore));
             }
         }
 
         function resetGame() {
-            score = 0;
-            gameSpeed = INITIAL_SPEED;
-            isGameOver = false;
-            gameStarted = false;
-            obstacles = [];
-            frameCount = 0;
+            score = 0; gameSpeed = INITIAL_SPEED; isGameOver = false;
+            obstacles = []; isNight = false; showNoice = false;
+            canFly = false; isInvincible = false; // "R" disables cheats
+            document.body.classList.remove('night');
             dino.y = GROUND_Y;
-            dino.dy = 0;
-            dino.isJumping = false;
-            dino.targetY = GROUND_Y;
-            nextObstacleDistance = OBSTACLE_MIN_DISTANCE;
-            
-            canFly = false;
-            isInvincible = false;
-            spaceCount = 0;
-            tapCount = 0;
-            showCheatMessage = false;
-            cheatMessageTimer = 0;
-            lastMilestoneScore = 0;
-            keysPressed = { up: false, down: false };
-            
-            cancelAnimationFrame(animationFrameId);
             animate();
         }
 
-        // Main game loop
         function animate() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
-            drawGround();
-
-            if (!gameStarted) {
-                dino.draw();
-                drawStartMessage();
-                animationFrameId = requestAnimationFrame(animate);
-                return;
-            }
+            // Night Mode Toggle
+            isNight = Math.floor(score / 700) % 2 === 1;
+            document.body.classList.toggle('night', isNight);
 
             if (isGameOver) {
-                dino.draw();
-                obstacles.forEach(obs => obs.update());
-                drawScore();
-                drawGameOver();
+                ctx.fillStyle = isNight ? "#DDD" : "#535353";
+                ctx.textAlign = "center";
+                ctx.fillText("GAME OVER - PRESS R TO RESET (CHEATS OFF)", canvas.width/2, 100);
                 return;
             }
 
-            if (showCheatMessage) {
-                cheatMessageTimer++;
-                if (cheatMessageTimer > 120) {
-                    showCheatMessage = false;
-                    cheatMessageTimer = 0;
-                }
-                ctx.fillStyle = isInvincible ? "#f39c12" : "orange";
-                ctx.font = "bold 20px Courier";
-                ctx.textAlign = "center";
-                ctx.fillText(isInvincible ? "INVINCIBILITY ON!" : "FLIGHT MODE ON!", canvas.width / 2, 30);
+            // Score & Meme Logic
+            score += 0.2;
+            const currentScoreInt = Math.floor(score);
+            if (currentScoreInt > 0 && currentScoreInt % 10000 === 0 && currentScoreInt !== lastMilestoneScore) {
+                playSound('noice');
+                showNoice = true;
+                noiceTimer = 100;
+                lastMilestoneScore = currentScoreInt;
             }
 
-            if (gameSpeed < MAX_SPEED) {
-                gameSpeed += SPEED_INCREMENT;
-            }
-
-            // Score: Normal = 100 per 2 sec, Flight = 1000 per 4 sec
-            if (canFly) {
-                score += 250 / 60; // 250 per second = 1000 per 4 seconds
-            } else {
-                score += 100 / 120; // 100 per 2 seconds
-            }
-
-            const currentScore = Math.floor(score);
-            
-            if (currentScore > 0 && currentScore !== lastMilestoneScore) {
-                if (currentScore % 10000 === 0) {
-                    playSound('noice');
-                    lastMilestoneScore = currentScore;
-                } else if (currentScore % 1000 === 0) {
-                    playSound('applause');
-                    lastMilestoneScore = currentScore;
-                } else if (currentScore % 100 === 0) {
-                    playSound('ding');
-                    lastMilestoneScore = currentScore;
-                }
-            }
-
+            gameSpeed = Math.min(15, gameSpeed + SPEED_INCREMENT);
             dino.update();
+            spawnManager();
 
-            spawnObstacle();
             obstacles = obstacles.filter(obs => {
                 obs.update();
-                return obs.x > -obs.width;
+                if (!isInvincible && 
+                    dino.x < obs.x + obs.width && dino.x + 30 > obs.x && 
+                    dino.y < obs.y + obs.height && dino.y + 30 > obs.y) {
+                    isGameOver = true;
+                }
+                return obs.x > -50;
             });
 
-            checkCollisions();
-            drawScore();
+            // UI Elements
+            ctx.fillStyle = isNight ? "#DDD" : "#535353";
+            ctx.textAlign = "right";
+            ctx.fillText(currentScoreInt.toString().padStart(5, '0'), canvas.width - 20, 30);
 
-            frameCount++;
+            if (showNoice && noiceTimer > 0) {
+                ctx.textAlign = "center";
+                ctx.font = "bold 30px Courier";
+                ctx.fillText("NOICE", canvas.width/2, 60);
+                noiceTimer--;
+                if (noiceTimer <= 0) showNoice = false;
+            }
+
             animationFrameId = requestAnimationFrame(animate);
         }
 
-        // Event listeners
-        document.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' || e.code === 'ArrowUp') {
-                e.preventDefault();
+        window.addEventListener('keydown', e => {
+            if (e.code === 'Space') {
+                if (!gameStarted) { gameStarted = true; animate(); }
+                if (!dino.isJumping) { dino.dy = JUMP_FORCE; dino.isJumping = true; playSound('jump'); }
                 
-                if (!gameStarted) {
-                    gameStarted = true;
-                    return;
-                }
-
-                if (isGameOver) return;
-
-                const now = Date.now();
-                if (now - lastSpaceTime < 1000) {
-                    spaceCount++;
-                } else {
-                    spaceCount = 1;
-                }
+                // Secret Triple Tap Cheat
+                let now = Date.now();
+                if (now - lastSpaceTime < 300) spaceCount++; else spaceCount = 1;
                 lastSpaceTime = now;
-
-                if (spaceCount >= 3 && !canFly) {
-                    canFly = true;
-                    showCheatMessage = true;
-                    cheatMessageTimer = 0;
-                    spaceCount = 0;
-                    console.log('✈️ Flight mode activated!');
-                } else {
-                    dino.jump();
-                }
+                if (spaceCount >= 3) { canFly = true; isInvincible = true; }
+                if (canFly) keysPressed.up = true;
             }
-
-            if (e.code === 'ArrowUp' && canFly && gameStarted && !isGameOver) {
-                e.preventDefault();
-                keysPressed.up = true;
-            }
-
-            if (e.code === 'ArrowDown' && canFly && gameStarted && !isGameOver) {
-                e.preventDefault();
-                keysPressed.down = true;
-            }
-
-            if (e.code === 'KeyR') {
-                if (isGameOver) {
-                    resetGame();
-                } else if (gameStarted) {
-                    isInvincible = !isInvincible;
-                    showCheatMessage = true;
-                    cheatMessageTimer = 0;
-                    console.log(isInvincible ? '🛡️ Invincibility activated!' : '⚠️ Invincibility deactivated!');
-                }
-            }
+            if (e.code === 'ArrowUp') keysPressed.up = true;
+            if (e.code === 'ArrowDown') keysPressed.down = true;
+            if (e.code === 'KeyR') resetGame();
         });
 
-        document.addEventListener('keyup', (e) => {
-            if (e.code === 'ArrowUp') {
-                keysPressed.up = false;
-            }
-            if (e.code === 'ArrowDown') {
-                keysPressed.down = false;
-            }
+        window.addEventListener('keyup', e => {
+            if (e.code === 'ArrowUp' || e.code === 'Space') keysPressed.up = false;
+            if (e.code === 'ArrowDown') keysPressed.down = false;
         });
 
-        canvas.addEventListener('click', () => {
-            if (!gameStarted) {
-                gameStarted = true;
-                return;
-            }
-
-            if (isGameOver) return;
-
-            const now = Date.now();
-            if (now - lastTapTime < 1000) {
-                tapCount++;
-            } else {
-                tapCount = 1;
-            }
-            lastTapTime = now;
-
-            if (tapCount >= 3 && !canFly) {
-                canFly = true;
-                showCheatMessage = true;
-                cheatMessageTimer = 0;
-                tapCount = 0;
-                console.log('✈️ Flight mode activated!');
-            } else {
-                dino.jump();
-            }
-        });
-
-        canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-        });
-
-        console.log('🦖 Dino Game loaded! High score:', highScore);
-        animate();
+        // Initial Draw
+        ctx.fillStyle = "#535353";
+        ctx.textAlign = "center";
+        ctx.fillText("TAP SPACE TO START", canvas.width/2, 100);
     </script>
 </body>
 </html>
