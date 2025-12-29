@@ -109,9 +109,9 @@
             },
             
             draw() {
-                ctx.fillStyle = '#00BFFF'; // Main body color (dino skin)
-                ctx.fillRect(this.x + 15, this.y, 14, 22); // Main body
-                ctx.fillStyle = '#228B22'; // Green legs
+                ctx.fillStyle = '#228B22'; // Dino body color (green)
+                ctx.fillRect(this.x + 15, this.y, 14, 22); // Body
+                ctx.fillStyle = '#006400'; // Dark green legs
                 ctx.fillRect(this.x + 5, this.y + 18, 6, 12); // Left leg
                 ctx.fillRect(this.x + 25, this.y + 18, 6, 12); // Right leg
                 
@@ -184,9 +184,9 @@
             draw() {
                 const wingFrame = Math.floor(frame / 8) % 2;
                 
-                ctx.fillStyle = '#B22222'; // Red wings
+                ctx.fillStyle = '#FF6347'; // Red wings
                 ctx.fillRect(this.x + 10, this.y, 30, 8); // Body
-                ctx.fillStyle = '#8B0000'; // Darker red
+                ctx.fillStyle = '#B22222'; // Darker red
                 ctx.fillRect(this.x, this.y + 8, 46, 12); // Wings
             }
             
@@ -208,26 +208,18 @@
             grad.addColorStop(1, skyBottomColor);
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-
-        function drawCelestial() {
-            const c = Math.sin(dayTime);
-            if (c < 0) {
-                ctx.save();
-                ctx.globalAlpha = Math.min(1, -c); // Fade in moon
-                ctx.fillStyle = '#FFFFFF'; // Moon
-                ctx.beginPath();
-                ctx.arc(700, 60, 30, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
-            } else {
-                ctx.save();
-                ctx.globalAlpha = Math.min(1, c); // Fade in sun
-                ctx.fillStyle = '#FFD700'; // Sun
-                ctx.beginPath();
-                ctx.arc(700, 60, 50, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.restore();
+            
+            ctx.fillStyle = '#FFFFFF'; // Clouds
+            ctx.beginPath();
+            ctx.arc(100, 60, 25, 0, Math.PI * 2);
+            ctx.arc(150, 70, 20, 0, Math.PI * 2);
+            ctx.arc(120, 100, 20, 0, Math.PI * 2);
+            ctx.fill();
+            
+            if (canFly) {
+                ctx.fillStyle = 'orange';
+                ctx.font = '20px Arial';
+                ctx.fillText('Flight enabled!', canvas.width / 2 - 75, 30);
             }
         }
 
@@ -235,8 +227,7 @@
             frame++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawSky();
-            drawCelestial();
-
+            
             if (gameOver) {
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -259,26 +250,26 @@
                         if (obstacle.hits(dino)) gameOver = true;
                     });
 
-                    score++;
+                    score += canFly ? 0.2 : 0.1; // Slow down score accumulation when on the ground
                 }
             }
 
             dino.update();
             dino.draw();
 
-            if (gameOver && score > highScore) {
-                highScore = score;
-                localStorage.setItem('highScore', highScore);
-            }
-
             ctx.fillStyle = 'white';
             ctx.font = '20px Arial';
-            ctx.fillText('Score: ' + score, 20, 30);
+            ctx.fillText('Score: ' + Math.floor(score), 20, 30);
             ctx.fillText('Highscore: ' + highScore, 20, 60);
 
             if (frame % 120 === 0) {
                 dayTime += 0.01;
                 if (dayTime > 3.14) dayTime = 0;
+            }
+
+            if (gameOver && score > highScore) {
+                highScore = score;
+                localStorage.setItem('highScore', highScore);
             }
 
             if (gameOver && spacePress > lastSpace + 1) {
