@@ -13,11 +13,10 @@
             min-height: 100vh; 
             background: #1a1a2e;
             font-family: 'Courier New', monospace;
-            overflow: hidden;
         }
         canvas { 
-            background: #fff;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border-radius: 8px;
         }
     </style>
 </head>
@@ -37,178 +36,630 @@
         let started = false;
         let obstacles = [];
         let frame = 0;
-        let nextSpawn = 100;
+        let nextSpawn = 400;
+        let particles = [];
+        let trees = [];
         let clouds = [];
         let dayTime = 0;
+        let mountains = 0;
+        
+        let canFly = false;
+        let spacePress = 0;
+        let lastSpace = 0;
+        let flightSpeed = 25;
+        let mph = 0;
+        let lastMilestone = 0;
+        
+        let keys = { up: false, down: false };
 
-        // --- AUDIO SETUP ---
-        const noice = new Audio('audiotrimmer_adesehy.mp3');
-        const applause = new Audio('aplausos_2.mp3');
-        const death = new Audio('directed-by-robert-b_voI2Z4T.mp3');
+        // Load audio files
+        const applauseAudio = new Audio();
+        applauseAudio.src = 'aplausos_2.mp3';
+        applauseAudio.volume = 0.5;
+        
+        const celebrationAudio = new Audio();
+        celebrationAudio.src = 'audiotrimmer_adesehy.mp3';
+        celebrationAudio.volume = 0.5;
+        
+        const deathAudio = new Audio();
+        deathAudio.src = 'directed-by-robert-b_voI2Z4T.mp3';
+        deathAudio.volume = 0.5;
+        
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        function playDing() {
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = 880; 
-            gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
-            osc.start();
-            osc.stop(audioCtx.currentTime + 0.2);
+        function beep(freq) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const now = audioCtx.currentTime;
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } catch(e) {}
         }
 
+        const dinoImg = new Image();
+        dinoImg.src = 'Screenshot_2025-12-27-14-38-59-263_com.android.chrome-edit.jpg';
+
         const dino = {
-            x: 50, y: GROUND, w: 40, h: 40,
-            dy: 0, jump: false, leg: 0,
+            x: 50, y: GROUND, w: 44, h: 47,
+            dy: 0, jump: false, leg: 0, targetY: GROUND,
+            
             update() {
-                this.dy += 0.6;
-                this.y += this.dy;
-                if (this.y >= GROUND) {
-                    this.y = GROUND;
+                if (canFly) {
+                    const diff = this.targetY - this.y;
+                    this.y += diff * 0.5;
                     this.dy = 0;
-                    this.jump = false;
-                }
-                if (frame % 8 === 0) this.leg = 1 - this.leg;
-            },
-            draw() {
-                ctx.fillStyle = '#535353';
-                // Body
-                ctx.fillRect(this.x, this.y, 30, 30);
-                // Head
-                ctx.fillRect(this.x + 20, this.y - 15, 20, 15);
-                // Legs
-                if (this.leg === 0) {
-                    ctx.fillRect(this.x, this.y + 30, 10, 10);
                 } else {
-                    ctx.fillRect(this.x + 20, this.y + 30, 10, 10);
+                    this.dy += 0.6;
+                    this.y += this.dy;
+                    if (this.y >= GROUND) {
+                        this.y = GROUND;
+                        this.dy = 0;
+                        this.jump = false;
+                    }
+                }
+                
+                if (this.y >= GROUND && started && !gameOver && frame % 5 === 0) {
+                    this.leg = 1 - this.leg;
+                }
+            },
+            
+            draw() {
+                ctx.save();
+                
+                // Enhanced dino with shadows and details
+                if (dinoImg.complete && dinoImg.naturalWidth > 0) {
+                    // Shadow
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 22, GROUND + 50, 20, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Glow effect when flying
+                    if (canFly) {
+                        ctx.shadowColor = '#00BFFF';
+                        ctx.shadowBlur = 15;
+                    }
+                    
+                    ctx.drawImage(dinoImg, this.x, this.y, this.w, this.h);
+                } else {
+                    // Enhanced fallback dino
+                    const baseColor = canFly ? '#00BFFF' : '#6B8E23';
+                    const darkColor = canFly ? '#0080C0' : '#556B2F';
+                    const lightColor = canFly ? '#87CEEB' : '#9ACD32';
+                    
+                    // Shadow
+                    ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + 22, GROUND + 50, 20, 6, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Body with gradient
+                    const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 44, this.y + 47);
+                    bodyGrad.addColorStop(0, lightColor);
+                    bodyGrad.addColorStop(1, darkColor);
+                    ctx.fillStyle = bodyGrad;
+                    
+                    // Main body
+                    ctx.beginPath();
+                    ctx.roundRect(this.x + 20, this.y, 22, 22, 3);
+                    ctx.fill();
+                    
+                    // Neck
+                    ctx.beginPath();
+                    ctx.roundRect(this.x + 35, this.y + 10, 7, 12, 2);
+                    ctx.fill();
+                    
+                    // Head with detail
+                    ctx.beginPath();
+                    ctx.roundRect(this.x + 35, this.y + 2, 15, 10, 2);
+                    ctx.fill();
+                    
+                    // Eye with shine
+                    ctx.fillStyle = '#FFF';
+                    ctx.beginPath();
+                    ctx.arc(this.x + 46, this.y + 5, 2.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = '#000';
+                    ctx.beginPath();
+                    ctx.arc(this.x + 46.5, this.y + 5.5, 1.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Highlight
+                    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                    ctx.beginPath();
+                    ctx.arc(this.x + 45.5, this.y + 4, 1, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Tail with gradient
+                    ctx.fillStyle = bodyGrad;
+                    ctx.beginPath();
+                    ctx.moveTo(this.x, this.y + 16);
+                    ctx.lineTo(this.x + 12, this.y + 16);
+                    ctx.lineTo(this.x + 12, this.y + 20);
+                    ctx.lineTo(this.x, this.y + 20);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 10, this.y + 18);
+                    ctx.lineTo(this.x + 22, this.y + 18);
+                    ctx.lineTo(this.x + 22, this.y + 22);
+                    ctx.lineTo(this.x + 10, this.y + 22);
+                    ctx.fill();
+                    
+                    // Animated legs with detail
+                    if (this.leg === 0) {
+                        ctx.fillStyle = darkColor;
+                        ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
+                        ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
+                        // Feet
+                        ctx.fillRect(this.x + 19, this.y + 31, 8, 2);
+                        ctx.fillRect(this.x + 29, this.y + 31, 8, 2);
+                    } else {
+                        ctx.fillStyle = darkColor;
+                        ctx.fillRect(this.x + 22, this.y + 22, 6, 10);
+                        ctx.fillRect(this.x + 28, this.y + 22, 6, 10);
+                        // Feet
+                        ctx.fillRect(this.x + 21, this.y + 31, 8, 2);
+                        ctx.fillRect(this.x + 27, this.y + 31, 8, 2);
+                    }
+                    
+                    // Belly highlight
+                    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                    ctx.fillRect(this.x + 22, this.y + 15, 18, 6);
+                }
+                
+                ctx.restore();
+                
+                if (canFly) {
+                    ctx.fillStyle = '#FF8C00';
+                    ctx.font = 'bold 16px Courier';
+                    ctx.textAlign = 'left';
+                    ctx.shadowColor = '#000';
+                    ctx.shadowBlur = 3;
+                    ctx.fillText('✈️ FLIGHT ENABLED', this.x - 25, this.y - 15);
+                    ctx.shadowBlur = 0;
+                }
+            },
+            
+            doJump() {
+                if (!canFly && !this.jump && this.y >= GROUND && !gameOver && started) {
+                    this.dy = -11;
+                    this.jump = true;
+                    beep(600);
                 }
             }
         };
 
-        class Cloud {
-            constructor() {
-                this.x = canvas.width + 100;
-                this.y = 30 + Math.random() * 50;
-                this.w = 120; // BIGGER CLOUDS
-            }
-            draw() {
-                ctx.fillStyle = '#d3d3d3';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, 30, 0, Math.PI * 2);
-                ctx.arc(this.x + 35, this.y - 10, 35, 0, Math.PI * 2);
-                ctx.arc(this.x + 70, this.y, 30, 0, Math.PI * 2);
-                ctx.fill();
-            }
-            update() { this.x -= speed * 0.5; }
-        }
-
         class Cactus {
             constructor() {
                 this.x = canvas.width;
-                this.w = 20;
-                this.h = 40;
-                this.y = GROUND + 40 - this.h;
+                this.w = 30;
+                this.h = 45;
+                this.y = GROUND + 47 - this.h;
+                this.type = Math.floor(Math.random() * 3);
             }
+            
+            update() {
+                this.x -= speed;
+            }
+            
             draw() {
-                ctx.fillStyle = '#27ae60';
-                ctx.fillRect(this.x, this.y, this.w, this.h);
-            }
-            update() { this.x -= speed; }
-        }
-
-        function handleInput() {
-            if (!started) started = true;
-            if (gameOver) {
-                score = 0; speed = 6; obstacles = []; gameOver = false;
-            } else if (dino.y >= GROUND) {
-                dino.dy = -12;
-            }
-        }
-
-        window.addEventListener('keydown', (e) => { if(e.code === 'Space') handleInput(); });
-        canvas.addEventListener('mousedown', handleInput);
-
-        function loop() {
-            // Background
-            ctx.fillStyle = '#f7f7f7';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Ground Line
-            ctx.strokeStyle = '#535353';
-            ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(0, GROUND + 40); ctx.lineTo(canvas.width, GROUND + 40); ctx.stroke();
-
-            if (started && !gameOver) {
-                frame++;
+                ctx.save();
                 
-                // Point Earning Logic
-                let oldScore = Math.floor(score);
-                // Slower on ground (0.05), Faster in air (0.2)
-                score += (dino.y < GROUND) ? 0.2 : 0.05; 
-                let newScore = Math.floor(score);
-
-                // Sound Logic
-                if (newScore > oldScore) {
-                    if (newScore % 10000 === 0 && newScore > 0) {
-                        noice.play().catch(()=>{});
-                    } else if (newScore % 1000 === 0 && newScore > 0) {
-                        applause.play().catch(()=>{});
-                    } else if (newScore % 100 === 0 && newScore > 0) {
-                        playDing();
-                    }
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath();
+                ctx.ellipse(this.x + 15, GROUND + 49, 12, 4, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Enhanced cactus with gradient and details
+                const cactusGrad = ctx.createLinearGradient(this.x, this.y, this.x + this.w, this.y + this.h);
+                cactusGrad.addColorStop(0, '#3CB371');
+                cactusGrad.addColorStop(0.5, '#2E8B57');
+                cactusGrad.addColorStop(1, '#228B22');
+                
+                if (this.type === 0) {
+                    // Tall single cactus
+                    ctx.fillStyle = cactusGrad;
+                    ctx.fillRect(this.x + 10, this.y, 12, this.h);
+                    
+                    // Left arm
+                    ctx.fillRect(this.x + 3, this.y + 12, 8, 18);
+                    ctx.fillRect(this.x + 3, this.y + 12, 4, 22);
+                    
+                    // Right arm
+                    ctx.fillRect(this.x + 21, this.y + 18, 8, 15);
+                    ctx.fillRect(this.x + 25, this.y + 18, 4, 20);
+                    
+                    // Highlights
+                    ctx.fillStyle = 'rgba(144,238,144,0.3)';
+                    ctx.fillRect(this.x + 11, this.y + 2, 2, this.h - 4);
+                    ctx.fillRect(this.x + 4, this.y + 14, 2, 16);
+                    ctx.fillRect(this.x + 26, this.y + 20, 2, 13);
+                    
+                } else if (this.type === 1) {
+                    // Short fat cactus
+                    ctx.fillStyle = cactusGrad;
+                    ctx.fillRect(this.x + 8, this.y + 10, 16, this.h - 10);
+                    
+                    // Arms
+                    ctx.fillRect(this.x + 2, this.y + 18, 7, 20);
+                    ctx.fillRect(this.x + 23, this.y + 20, 7, 18);
+                    
+                    // Highlights
+                    ctx.fillStyle = 'rgba(144,238,144,0.3)';
+                    ctx.fillRect(this.x + 9, this.y + 12, 2, this.h - 14);
+                    
+                } else {
+                    // Double cactus
+                    ctx.fillStyle = cactusGrad;
+                    ctx.fillRect(this.x + 6, this.y + 5, 10, this.h - 5);
+                    ctx.fillRect(this.x + 17, this.y + 8, 10, this.h - 8);
+                    
+                    // Small arms
+                    ctx.fillRect(this.x + 2, this.y + 15, 5, 15);
+                    ctx.fillRect(this.x + 26, this.y + 18, 5, 12);
+                    
+                    // Highlights
+                    ctx.fillStyle = 'rgba(144,238,144,0.3)';
+                    ctx.fillRect(this.x + 7, this.y + 7, 2, this.h - 9);
+                    ctx.fillRect(this.x + 18, this.y + 10, 2, this.h - 12);
                 }
-
-                if (speed < 15) speed += 0.001;
-
-                // Clouds
-                if (frame % 100 === 0) clouds.push(new Cloud());
-                clouds = clouds.filter(c => {
-                    c.update(); c.draw();
-                    return c.x > -150;
-                });
-
-                // Obstacles
-                nextSpawn--;
-                if (nextSpawn <= 0) {
-                    obstacles.push(new Cactus());
-                    nextSpawn = 60 + Math.random() * 100;
+                
+                // Spines/needles
+                ctx.fillStyle = '#1C6B3A';
+                for (let i = 0; i < this.h; i += 6) {
+                    ctx.fillRect(this.x + 9, this.y + i, 1, 2);
+                    ctx.fillRect(this.x + 20, this.y + i + 3, 1, 2);
                 }
-
-                obstacles = obstacles.filter(o => {
-                    o.update(); o.draw();
-                    if (dino.x < o.x + o.w && dino.x + dino.w > o.x && dino.y < o.y + o.h && dino.y + dino.h > o.y) {
-                        gameOver = true;
-                        death.play().catch(()=>{});
-                    }
-                    return o.x > -50;
-                });
-
-                dino.update();
+                
+                ctx.restore();
             }
-
-            dino.draw();
-
-            // UI
-            ctx.fillStyle = '#535353';
-            ctx.font = '20px Courier';
-            ctx.textAlign = 'right';
-            ctx.fillText(Math.floor(score).toString().padStart(5, '0'), canvas.width - 20, 30);
-
-            if (!started) {
-                ctx.textAlign = 'center';
-                ctx.fillText('CLICK TO START', canvas.width/2, canvas.height/2);
+            
+            hits(d) {
+                return d.x < this.x + this.w - 5 &&
+                       d.x + d.w - 5 > this.x &&
+                       d.y < this.y + this.h - 5 &&
+                       d.y + d.h - 5 > this.y;
             }
-            if (gameOver) {
-                ctx.textAlign = 'center';
-                ctx.fillText('GAME OVER - CLICK TO RESTART', canvas.width/2, canvas.height/2);
-            }
-
-            requestAnimationFrame(loop);
         }
 
-        loop();
-    </script>
-</body>
-</html>
+        class Ptero {
+            constructor() {
+                this.x = canvas.width;
+                this.w = 50;
+                this.h = 35;
+                this.y = GROUND - 40 - Math.random() * 40;
+                this.wingAngle = 0;
+            }
+            
+            update() {
+                this.x -= speed * 1.1;
+                this.wingAngle += 0.3;
+            }
+            
+            draw() {
+                ctx.save();
+                
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.beginPath();
+                ctx.ellipse(this.x + 25, GROUND + 48, 15, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                const wingUp = Math.sin(this.wingAngle) > 0;
+                const wingOffset = Math.sin(this.wingAngle) * 8;
+                
+                // Body gradient
+                const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 40, this.y + 20);
+                bodyGrad.addColorStop(0, '#A0522D');
+                bodyGrad.addColorStop(1, '#8B4513');
+                
+                // Wings (behind body)
+                const wingGrad = ctx.createLinearGradient(this.x, this.y - 10, this.x, this.y + 25);
+                wingGrad.addColorStop(0, '#CD853F');
+                wingGrad.addColorStop(1, '#8B4513');
+                ctx.fillStyle = wingGrad;
+                
+                // Left wing
+                ctx.beginPath();
+                ctx.moveTo(this.x + 15, this.y + 10);
+                ctx.lineTo(this.x + 8, this.y + 8 - wingOffset);
+                ctx.lineTo(this.x + 5, this.y + 12 - wingOffset);
+                ctx.lineTo(this.x + 12, this.y + 15);
+                ctx.fill();
+                
+                // Wing detail
+                ctx.strokeStyle = '#654321';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(this.x + 12, this.y + 11);
+                ctx.lineTo(this.x + 7, this.y + 10 - wingOffset);
+                ctx.stroke();
+                
+                // Right wing
+                ctx.fillStyle = wingGrad;
+                ctx.beginPath();
+                ctx.moveTo(this.x + 25, this.y + 10);
+                ctx.lineTo(this.x + 32, this.y + 8 - wingOffset);
+                ctx.lineTo(this.x + 35, this.y + 12 - wingOffset);
+                ctx.lineTo(this.x + 28, this.y + 15);
+                ctx.fill();
+                
+                // Wing detail
+                ctx.beginPath();
+                ctx.moveTo(this.x + 28, this.y + 11);
+                ctx.lineTo(this.x + 33, this.y + 10 - wingOffset);
+                ctx.stroke();
+                
+                // Body
+                ctx.fillStyle = bodyGrad;
+                ctx.beginPath();
+                ctx.ellipse(this.x + 20, this.y + 12, 12, 6, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Belly highlight
+                ctx.fillStyle = 'rgba(210,180,140,0.4)';
+                ctx.beginPath();
+                ctx.ellipse(this.x + 20, this.y + 14, 8, 3, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Head
+                ctx.fillStyle = bodyGrad;
+                ctx.beginPath();
+                ctx.ellipse(this.x + 32, this.y + 10, 6, 5, 0, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Crest
+                ctx.fillStyle = '#CD5C5C';
+                ctx.beginPath();
+                ctx.moveTo(this.x + 32, this.y + 6);
+                ctx.lineTo(this.x + 35, this.y + 4);
+                ctx.lineTo(this.x + 37, this.y + 8);
+                ctx.fill();
+                
+                // Beak
+                ctx.fillStyle = '#DAA520';
+                ctx.beginPath();
+                ctx.moveTo(this.x + 37, this.y + 10);
+                ctx.lineTo(this.x + 44, this.y + 11);
+                ctx.lineTo(this.x + 37, this.y + 12);
+                ctx.fill();
+                
+                // Eye
+                ctx.fillStyle = '#FFF';
+                ctx.beginPath();
+                ctx.arc(this.x + 34, this.y + 10, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = '#000';
+                ctx.beginPath();
+                ctx.arc(this.x + 34.5, this.y + 10, 1, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Tail
+                ctx.fillStyle = bodyGrad;
+                ctx.beginPath();
+                ctx.moveTo(this.x + 10, this.y + 12);
+                ctx.lineTo(this.x + 5, this.y + 14);
+                ctx.lineTo(this.x + 8, this.y + 10);
+                ctx.lineTo(this.x + 4, this.y + 8);
+                ctx.lineTo(this.x + 10, this.y + 10);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+            
+            hits(d) {
+                return d.x < this.x + this.w - 10 &&
+                       d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 8 &&
+                       d.y + d.h - 8 > this.y;
+            }
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = -speed * 0.8 - Math.random() * 2;
+                this.vy = (Math.random() - 0.5) * 4;
+                this.life = 30;
+                this.maxLife = 30;
+                this.size = 1 + Math.random() * 2;
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.1;
+                this.life--;
+            }
+            
+            draw() {
+                const alpha = this.life / this.maxLife;
+                ctx.fillStyle = `rgba(139,115,85,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Tree {
+            constructor(x, layer) {
+                this.x = x;
+                this.layer = layer;
+                this.h = 40 + Math.random() * 30;
+                this.w = 15 + Math.random() * 10;
+                this.type = Math.floor(Math.random() * 3);
+            }
+            
+            update() {
+                this.x -= speed * (this.layer === 0 ? 0.3 : 0.5);
+            }
+            
+            draw() {
+                const alpha = this.layer === 0 ? 0.3 : 0.5;
+                ctx.globalAlpha = alpha;
+                
+                const baseY = GROUND + 47;
+                const trunkW = this.w * 0.35;
+                const trunkX = this.x + this.w / 2 - trunkW / 2;
+                
+                // Trunk with texture
+                const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
+                trunkGrad.addColorStop(0, '#5C4033');
+                trunkGrad.addColorStop(1, '#3E2723');
+                ctx.fillStyle = trunkGrad;
+                ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                
+                // Trunk highlight
+                ctx.fillStyle = 'rgba(139,90,43,0.3)';
+                ctx.fillRect(trunkX, baseY - this.h, trunkW * 0.3, this.h);
+                
+                // Foliage
+                const leafGrad = ctx.createRadialGradient(
+                    this.x + this.w / 2, baseY - this.h - 10, 0,
+                    this.x + this.w / 2, baseY - this.h - 10, this.w
+                );
+                leafGrad.addColorStop(0, '#4CAF50');
+                leafGrad.addColorStop(0.7, '#2E7D32');
+                leafGrad.addColorStop(1, '#1B5E20');
+                
+                ctx.fillStyle = leafGrad;
+                if (this.type === 0) {
+                    // Pine tree
+                    for (let i = 0; i < 4; i++) {
+                        const y = baseY - this.h - 8 + i * 10;
+                        const w = this.w * (1.3 - i * 0.25);
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.w / 2, y - 12);
+                        ctx.lineTo(this.x + this.w / 2 - w / 2, y);
+                        ctx.lineTo(this.x + this.w / 2 + w / 2, y);
+                        ctx.closePath();
+                        ctx.fill();
+                    }
+                } else {
+                    // Round tree
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    // Additional foliage clusters
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 - this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 + this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Cloud {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 100; // Bigger clouds!
+                this.puffs = [
+                    { x: 0, y: 0, r: 22 },
+                    { x: 30, y: -5, r: 28 },
+                    { x: 60, y: 0, r: 24 },
+                    { x: 20, y: 8, r: 20 },
+                    { x: 45, y: 8, r: 22 }
+                ];
+            }
+            
+            update() {
+                this.x -= speed * 0.2;
+            }
+            
+            draw() {
+                ctx.save();
+                // Enhanced clouds with gradient
+                const cloudGrad = ctx.createRadialGradient(this.x + 30, this.y, 0, this.x + 30, this.y, 50);
+                cloudGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                cloudGrad.addColorStop(1, 'rgba(240,240,240,0.6)');
+                ctx.fillStyle = cloudGrad;
+                
+                this.puffs.forEach(puff => {
+                    ctx.beginPath();
+                    ctx.arc(this.x + puff.x, this.y + puff.y, puff.r, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                // Cloud shadow
+                ctx.fillStyle = 'rgba(200,200,200,0.3)';
+                this.puffs.forEach(puff => {
+                    ctx.beginPath();
+                    ctx.ellipse(this.x + puff.x, this.y + puff.y + puff.r - 5, puff.r * 0.8, puff.r * 0.4, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                });
+                
+                ctx.restore();
+            }
+        }
+
+        function drawSky() {
+            const c = Math.sin(dayTime);
+            let topColor, bottomColor;
+            
+            if (c > 0.5) {
+                // Day
+                topColor = '#87CEEB';
+                bottomColor = '#E0F6FF';
+            } else if (c < -0.5) {
+                // Night
+                topColor = '#0a0a28';
+                bottomColor = '#14143c';
+            } else {
+                // Transition
+                const t = (c + 0.5);
+                topColor = `rgb(${Math.floor(135*t+10*(1-t))},${Math.floor(206*t+10*(1-t))},${Math.floor(235*t+40*(1-t))})`;
+                bottomColor = `rgb(${Math.floor(224*t+20*(1-t))},${Math.floor(246*t+20*(1-t))},${Math.floor(255*t+60*(1-t))})`;
+            }
+            
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, topColor);
+            grad.addColorStop(1, bottomColor);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawCelestial() {
+            const c = Math.sin(dayTime);
+            
+            // Sun
+            if (c > 0) {
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, c + 0.3);
+                const y = 35 - c * 15;
+                
+                // Sun glow
+                const sunGlow = ctx.createRadialGradient(700, y, 5, 700, y, 30);
+                sunGlow.addColorStop(0, 'rgba(255,215,0,0.8)');
+                sunGlow.addColorStop(1, 'rgba(255,215,0,0)');
+                ctx.fillStyle = sunGlow;
+                ctx.beginPath();
+                ctx.arc(700, y, 30, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Sun
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(700, y, 20, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Sun rays
+                for (let i = 0; i < 12; i++) {
+                    const a = (i * Math.PI / 6) + frame * 0.02
