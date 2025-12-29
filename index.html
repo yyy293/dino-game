@@ -39,9 +39,8 @@
         let particles = [];
         let trees = [];
         let clouds = [];
-        let mountains = 0;
         let dayTime = 0;
-        let biome = 'forest'; // forest, desert, snow
+        let biome = 'forest'; // Starting biome
         let biomeTimer = 0;
         
         let canFly = false;
@@ -52,20 +51,8 @@
         
         let keys = { up: false, down: false };
 
-        const noice = new Audio();
-        noice.src = 'audiotrimmer_adesehy.mp3';
-        noice.volume = 0.5;
-        
-        const applause = new Audio();
-        applause.src = 'aplausos_2.mp3';
-        applause.volume = 0.5;
-        
-        const death = new Audio();
-        death.src = 'directed-by-robert-b_voI2Z4T.mp3';
-        death.volume = 0.5;
-        
         const audio = new (window.AudioContext || window.webkitAudioContext)();
-
+        
         function beep(freq) {
             try {
                 const now = audio.currentTime;
@@ -208,14 +195,9 @@
             grad.addColorStop(1, skyBottomColor);
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
-            ctx.fillStyle = '#FFFFFF'; // Clouds
-            ctx.beginPath();
-            ctx.arc(100, 60, 25, 0, Math.PI * 2);
-            ctx.arc(150, 70, 20, 0, Math.PI * 2);
-            ctx.arc(120, 100, 20, 0, Math.PI * 2);
-            ctx.fill();
-            
+
+            if (frame % 150 === 0) biomeChange();
+
             if (canFly) {
                 ctx.fillStyle = 'orange';
                 ctx.font = '20px Arial';
@@ -223,11 +205,21 @@
             }
         }
 
+        function biomeChange() {
+            if (score > biomeTimer + 500) {
+                biomeTimer = score;
+                if (biome === 'forest') biome = 'desert';
+                else if (biome === 'desert') biome = 'mountain';
+                else if (biome === 'mountain') biome = 'snow';
+                else if (biome === 'snow') biome = 'forest';
+            }
+        }
+
         function gameLoop() {
             frame++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             drawSky();
-            
+
             if (gameOver) {
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -235,23 +227,24 @@
                 ctx.font = '30px Arial';
                 ctx.fillText('GAME OVER', canvas.width / 2 - 80, canvas.height / 2);
                 ctx.fillText(`Score: ${score}`, canvas.width / 2 - 70, canvas.height / 2 + 40);
+                ctx.fillText(`Highscore: ${highScore}`, canvas.width / 2 - 90, canvas.height / 2 + 80);
             }
 
-            if (started) {
+            if (started && !gameOver) {
                 if (frame % nextSpawn === 0) {
                     if (Math.random() > 0.5) obstacles.push(new Cactus());
                     if (Math.random() > 0.7) obstacles.push(new Ptero());
                 }
 
-                if (!gameOver) {
-                    obstacles.forEach((obstacle) => {
-                        obstacle.update();
-                        obstacle.draw();
-                        if (obstacle.hits(dino)) gameOver = true;
-                    });
+                obstacles.forEach((obstacle) => {
+                    obstacle.update();
+                    obstacle.draw();
+                    if (obstacle.hits(dino)) {
+                        gameOver = true;
+                    }
+                });
 
-                    score += canFly ? 0.2 : 0.1; // Slow down score accumulation when on the ground
-                }
+                score += canFly ? 0.2 : 0.1; // Slow down score accumulation on the ground
             }
 
             dino.update();
@@ -285,8 +278,14 @@
         }
 
         window.addEventListener('keydown', (e) => {
-            if (e.code === 'Space' && !gameOver && !dino.jump) {
-                dino.doJump();
+            if (e.code === 'Space') {
+                if (!gameOver && !dino.jump) {
+                    dino.doJump();
+                }
+                if (gameOver) {
+                    spacePress++;
+                    lastSpace = frame;
+                }
             }
         });
 
