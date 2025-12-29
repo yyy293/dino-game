@@ -202,9 +202,9 @@
 
         function drawSky() {
             const c = Math.sin(dayTime);
-            const skyTopColor = c > 0 ? '#87CEEB' : '#2E2A47';
-            const skyBottomColor = c > 0 ? '#E0F6FF' : '#0A0A28';
-            
+            const skyTopColor = c > 0 ? '#87CEEB' : '#2E2A47';  // Bright sky during day, dark during night
+            const skyBottomColor = c > 0 ? '#E0F6FF' : '#0A0A28'; // Lighter blue at bottom for daytime
+
             const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
             grad.addColorStop(0, skyTopColor);
             grad.addColorStop(1, skyBottomColor);
@@ -215,46 +215,36 @@
         function drawCelestial() {
             const c = Math.sin(dayTime);
             
+            // Day Phase (Sun)
             if (c > 0) {
                 ctx.save();
-                ctx.globalAlpha = Math.min(1, c + 0.3);
-                const y = 40 - c * 20;
-                
+                ctx.globalAlpha = Math.min(1, c); // Fade in/out sun
                 ctx.fillStyle = '#FFD700'; // Sun
                 ctx.beginPath();
-                ctx.arc(700, y, 18, 0, Math.PI * 2);
+                ctx.arc(700, 60, 50, 0, Math.PI * 2);
                 ctx.fill();
-                
                 ctx.restore();
-            } else {
+            } 
+            
+            // Night Phase (Moon)
+            else {
                 ctx.save();
-                ctx.globalAlpha = Math.max(0, 0.5 - c);
-                const y = 40 + c * 20;
-                
+                ctx.globalAlpha = Math.min(1, -c); // Fade in/out moon
                 ctx.fillStyle = '#FFFFFF'; // Moon
                 ctx.beginPath();
-                ctx.arc(700, y, 18, 0, Math.PI * 2);
+                ctx.arc(700, 60, 30, 0, Math.PI * 2);
                 ctx.fill();
-                
                 ctx.restore();
             }
         }
 
-        function spawnCactus() {
-            if (Math.random() > 0.5) obstacles.push(new Cactus());
-        }
-        
-        function spawnPtero() {
-            if (Math.random() > 0.7) obstacles.push(new Ptero());
-        }
-        
         function gameLoop() {
             frame++;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
 
             drawSky();
             drawCelestial();
-            
+
             if (gameOver) {
                 ctx.fillStyle = 'rgba(0,0,0,0.6)';
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -266,8 +256,8 @@
 
             if (started) {
                 if (frame % nextSpawn === 0) {
-                    spawnCactus();
-                    spawnPtero();
+                    if (Math.random() > 0.5) obstacles.push(new Cactus());
+                    if (Math.random() > 0.7) obstacles.push(new Ptero());
                 }
 
                 if (!gameOver) {
@@ -298,7 +288,7 @@
                 dayTime += 0.01;
                 if (dayTime > 3.14) dayTime = 0;
             }
-            
+
             if (gameOver && spacePress > lastSpace + 1) {
                 gameOver = false;
                 obstacles = [];
