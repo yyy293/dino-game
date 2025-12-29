@@ -1,263 +1,334 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Dino Biome Runner</title>
-<style>
-body{
-    margin:0;
-    background:#0b1020;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    font-family:Courier, monospace;
-}
-canvas{
-    box-shadow:0 0 25px #000;
-}
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dino Game</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            display: flex;
+            justify-content: center; 
+            align-items: center; 
+            min-height: 100vh; 
+            background: #1a1a2e;
+            font-family: 'Courier New', monospace;
+        }
+        canvas { 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+    </style>
 </head>
 <body>
+    <canvas id="game"></canvas>
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 800;
+        canvas.height = 200;
 
-<canvas id="game" width="800" height="220"></canvas>
+        const GROUND = 150;
+        let speed = 6;
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0;
+        let gameOver = false;
+        let started = false;
+        let obstacles = [];
+        let frame = 0;
+        let nextSpawn = 400;
+        let particles = [];
+        let trees = [];
+        let clouds = [];
+        let mountains = 0;
+        let dayTime = 0;
+        let biome = 'forest'; // forest, desert, snow
+        let biomeTimer = 0;
+        
+        let canFly = false;
+        let invincible = false;
+        let spacePress = 0;
+        let lastSpace = 0;
+        let flightSpeed = 12;
+        
+        let keys = { up: false, down: false };
 
-<script>
-const c = document.getElementById("game");
-const ctx = c.getContext("2d");
+        const noice = new Audio();
+        noice.src = 'audiotrimmer_adesehy.mp3';
+        noice.volume = 0.5;
+        
+        const applause = new Audio();
+        applause.src = 'aplausos_2.mp3';
+        applause.volume = 0.5;
+        
+        const death = new Audio();
+        death.src = 'directed-by-robert-b_voI2Z4T.mp3';
+        death.volume = 0.5;
+        
+        const audio = new (window.AudioContext || window.webkitAudioContext)();
 
-const GROUND = 150;
-let speed = 6;
-let score = 0;
-let hi = localStorage.getItem("hi")||0;
-let started=false, gameOver=false, frame=0;
-let obstacles=[], clouds=[];
-let canFly=false, lastTap=0, tapCount=0;
-let keys={up:false,down:false};
-
-// ---------- AUDIO ----------
-const applause = new Audio("aplausos_2.mp3");
-const big = new Audio("audiotrimmer_adesehy.mp3");
-const death = new Audio("directed-by-robert-b_voI2Z4T.mp3");
-
-const ac = new (window.AudioContext||window.webkitAudioContext)();
-function ding(f=1000){
-    const o=ac.createOscillator(), g=ac.createGain();
-    o.frequency.value=f; g.gain.value=0.1;
-    o.connect(g); g.connect(ac.destination);
-    o.start(); o.stop(ac.currentTime+0.15);
-}
-
-// ---------- BIOMES ----------
-const BIOMES=["forest","desert","mountain","snow"];
-let biomeIndex=0, biomeTimer=0;
-
-function biome(){
-    return BIOMES[biomeIndex];
-}
-
-// ---------- DINO ----------
-const dino={
-x:50,y:GROUND,w:30,h:34,dy:0,jump:false,targetY:GROUND,
-update(){
-    if(canFly){
-        if(keys.up) this.targetY-=10;
-        if(keys.down) this.targetY+=10;
-        this.targetY=Math.max(30,Math.min(GROUND,this.targetY));
-        this.y+=(this.targetY-this.y)*0.3;
-        this.dy=0;
-    }else{
-        this.dy+=0.6;
-        this.y+=this.dy;
-        if(this.y>=GROUND){
-            this.y=GROUND; this.dy=0; this.jump=false;
+        function beep(freq) {
+            try {
+                const now = audio.currentTime;
+                const osc = audio.createOscillator();
+                const gain = audio.createGain();
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.1, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                osc.connect(gain);
+                gain.connect(audio.destination);
+                osc.start(now);
+                osc.stop(now + 0.2);
+            } catch(e) {
+                console.log('Audio error:', e);
+            }
         }
-    }
-},
-draw(){
-    ctx.fillStyle="#2ecc71";
-    ctx.fillRect(this.x,this.y,this.w,this.h);
-    ctx.fillRect(this.x+18,this.y-6,14,14);
-    ctx.fillStyle="#fff";
-    ctx.fillRect(this.x+26,this.y-2,3,3);
-    ctx.fillStyle="#145a32";
-    ctx.fillRect(this.x+5,this.y+this.h,6,8);
-    ctx.fillRect(this.x+18,this.y+this.h,6,8);
-    if(canFly){
-        ctx.fillStyle="#ff9800";
-        ctx.fillText("FLIGHT",this.x-4,this.y-10);
-    }
-},
-jumpUp(){
-    if(!canFly && !this.jump){
-        this.dy=-11; this.jump=true; ding(600);
-    }
-}
-};
 
-// ---------- OBSTACLES ----------
-class Cactus{
-constructor(){
-    this.x=c.width;
-    this.h=40+Math.random()*15;
-    this.w=20;
-    this.y=GROUND+34-this.h;
-}
-update(){ this.x-=speed; }
-draw(){
-    ctx.fillStyle="#27ae60";
-    ctx.fillRect(this.x,this.y,8,this.h);
-    ctx.fillRect(this.x-6,this.y+12,6,16);
-    ctx.fillRect(this.x+8,this.y+18,6,14);
-}
-hit(d){
-    return d.x<this.x+this.w && d.x+d.w>this.x &&
-           d.y<this.y+this.h && d.y+d.h>this.y;
-}}
-class Ptero{
-constructor(){
-    this.x=c.width;
-    this.y=50+Math.random()*50;
-    this.w=38; this.h=20;
-}
-update(){ this.x-=speed+1; }
-draw(){
-    ctx.fillStyle="#c0392b";
-    ctx.fillRect(this.x,this.y,14,6);
-    ctx.fillRect(this.x+18,this.y,14,6);
-    ctx.fillStyle="#8e2c23";
-    ctx.fillRect(this.x+12,this.y+8,14,6);
-}
-hit(d){
-    return d.x<this.x+this.w && d.x+d.w>this.x &&
-           d.y<this.y+this.h && d.y+d.h>this.y;
-}}
+        const dino = {
+            x: 50, y: GROUND, w: 44, h: 47,
+            dy: 0, jump: false, leg: 0, targetY: GROUND,
+            
+            update() {
+                if (canFly) {
+                    if (keys.up) this.targetY = Math.max(20, this.targetY - flightSpeed);
+                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + flightSpeed);
+                    this.y += (this.targetY - this.y) * 0.4;
+                    this.dy = 0;
+                } else {
+                    this.dy += 0.6;
+                    this.y += this.dy;
+                    if (this.y >= GROUND) {
+                        this.y = GROUND;
+                        this.dy = 0;
+                        this.jump = false;
+                    }
+                }
+                
+                if (this.y >= GROUND && started && !gameOver && frame % 5 === 0) {
+                    this.leg = 1 - this.leg;
+                }
+            },
+            
+            draw() {
+                ctx.fillStyle = '#00BFFF';
+                ctx.fillRect(this.x + 20, this.y, 22, 22);
+                ctx.fillRect(this.x + 35, this.y + 10, 7, 12);
+                ctx.fillRect(this.x + 35, this.y + 2, 15, 10);
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 45, this.y + 4, 3, 3);
+                ctx.fillStyle = '#00BFFF';
+                ctx.fillRect(this.x + 10, this.y + 18, 12, 4);
+                ctx.fillRect(this.x, this.y + 16, 12, 4);
+                
+                if (this.leg === 0) {
+                    ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
+                } else {
+                    ctx.fillRect(this.x + 22, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 28, this.y + 22, 6, 10);
+                }
+                
+                if (canFly) {
+                    ctx.fillStyle = '#FF8C00';
+                    ctx.font = 'bold 16px Courier';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('FLIGHT ENABLED!', this.x - 20, this.y - 10);
+                }
+            },
+            
+            doJump() {
+                if (!canFly && !this.jump && this.y >= GROUND && !gameOver && started) {
+                    this.dy = -11;
+                    this.jump = true;
+                    beep(600);
+                }
+            }
+        };
 
-// ---------- CLOUD ----------
-class Cloud{
-constructor(){
-    this.x=c.width;
-    this.y=20+Math.random()*40;
-}
-update(){ this.x-=1; }
-draw(){
-    ctx.fillStyle="rgba(255,255,255,0.7)";
-    ctx.beginPath();
-    ctx.arc(this.x,this.y,18,0,Math.PI*2);
-    ctx.arc(this.x+25,this.y-4,22,0,Math.PI*2);
-    ctx.arc(this.x+55,this.y,18,0,Math.PI*2);
-    ctx.fill();
-}}
-
-// ---------- BACKGROUND ----------
-function drawBackground(){
-    if(biome()==="forest") ctx.fillStyle="#87ceeb";
-    if(biome()==="desert") ctx.fillStyle="#f4d03f";
-    if(biome()==="mountain") ctx.fillStyle="#aab7b8";
-    if(biome()==="snow") ctx.fillStyle="#eaf2f8";
-    ctx.fillRect(0,0,c.width,c.height);
-
-    if(biome()==="mountain"){
-        ctx.fillStyle="#5d6d7e";
-        for(let i=0;i<5;i++){
-            ctx.beginPath();
-            ctx.moveTo(i*200,GROUND+40);
-            ctx.lineTo(i*200+100,60);
-            ctx.lineTo(i*200+200,GROUND+40);
-            ctx.fill();
+        class Cactus {
+            constructor() {
+                this.x = canvas.width;
+                this.w = 30;
+                this.h = 45;
+                this.y = GROUND + 47 - this.h;
+            }
+            
+            update() {
+                this.x -= speed;
+            }
+            
+            draw() {
+                ctx.fillStyle = '#27ae60'; // Green cactus
+                ctx.fillRect(this.x + 12, this.y, 10, this.h); // Main trunk
+                ctx.fillRect(this.x + 4, this.y + 10, 8, 20); // Left arm
+                ctx.fillRect(this.x + 22, this.y + 15, 8, 18); // Right arm
+            }
+            
+            hits(d) {
+                return d.x < this.x + this.w - 5 &&
+                       d.x + d.w - 5 > this.x &&
+                       d.y < this.y + this.h - 5 &&
+                       d.y + d.h - 5 > this.y;
+            }
         }
-    }
-}
 
-// ---------- LOOP ----------
-function loop(){
-    ctx.clearRect(0,0,c.width,c.height);
-    drawBackground();
-
-    clouds.forEach(cl=>{cl.update(); cl.draw();});
-    clouds=clouds.filter(cl=>cl.x>-80);
-
-    ctx.strokeStyle="#333";
-    ctx.beginPath();
-    ctx.moveTo(0,GROUND+34);
-    ctx.lineTo(c.width,GROUND+34);
-    ctx.stroke();
-
-    if(!started){
-        dino.draw();
-        ctx.fillStyle="#000";
-        ctx.fillText("SPACE / CLICK TO START",280,110);
-        requestAnimationFrame(loop); return;
-    }
-    if(gameOver){
-        ctx.fillText("GAME OVER",350,100);
-        ctx.fillText("R to restart",350,120);
-        return;
-    }
-
-    biomeTimer++;
-    if(biomeTimer>1200){
-        biomeIndex=(biomeIndex+1)%BIOMES.length;
-        biomeTimer=0;
-    }
-
-    const prev=Math.floor(score);
-    score+=canFly?250/60:100/240;
-    const s=Math.floor(score);
-
-    if(s!==prev && s>0){
-        if(s%10000===0){ big.currentTime=0; big.play(); }
-        else if(s%1000===0){ applause.currentTime=0; applause.play(); }
-        else if(s%100===0){ ding(); }
-    }
-
-    dino.update(); dino.draw();
-
-    if(Math.random()>0.985) obstacles.push(Math.random()>0.5?new Cactus():new Ptero());
-    if(Math.random()>0.99) clouds.push(new Cloud());
-
-    obstacles.forEach(o=>{
-        o.update(); o.draw();
-        if(o.hit(dino)){
-            gameOver=true; death.play();
-            if(score>hi){ hi=score; localStorage.setItem("hi",Math.floor(hi)); }
+        class Ptero {
+            constructor() {
+                this.x = canvas.width;
+                this.w = 46;
+                this.h = 40;
+                this.y = GROUND - 35 - Math.random() * 35;
+            }
+            
+            update() {
+                this.x -= speed;
+            }
+            
+            draw() {
+                const wingFrame = Math.floor(frame / 8) % 2;
+                
+                ctx.fillStyle = '#B22222'; // Red wings
+                ctx.fillRect(this.x + 10, this.y, 30, 8); // Body
+                ctx.fillStyle = '#8B0000'; // Darker red
+                ctx.fillRect(this.x, this.y + 8, 46, 12); // Wings
+            }
+            
+            hits(d) {
+                return d.x < this.x + this.w - 10 &&
+                       d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 10 &&
+                       d.y + d.h - 10 > this.y;
+            }
         }
-    });
-    obstacles=obstacles.filter(o=>o.x>-50);
 
-    ctx.fillStyle="#000";
-    ctx.fillText("HI "+Math.floor(hi),700,20);
-    ctx.fillText(Math.floor(score),700,40);
+        function drawSky() {
+            const c = Math.sin(dayTime);
+            const skyTopColor = c > 0 ? '#87CEEB' : '#2E2A47';
+            const skyBottomColor = c > 0 ? '#E0F6FF' : '#0A0A28';
+            
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, skyTopColor);
+            grad.addColorStop(1, skyBottomColor);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
 
-    frame++; requestAnimationFrame(loop);
-}
+        function drawCelestial() {
+            const c = Math.sin(dayTime);
+            
+            if (c > 0) {
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, c + 0.3);
+                const y = 40 - c * 20;
+                
+                ctx.fillStyle = '#FFD700'; // Sun
+                ctx.beginPath();
+                ctx.arc(700, y, 18, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            } else {
+                ctx.save();
+                ctx.globalAlpha = Math.max(0, 0.5 - c);
+                const y = 40 + c * 20;
+                
+                ctx.fillStyle = '#FFFFFF'; // Moon
+                ctx.beginPath();
+                ctx.arc(700, y, 18, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
 
-// ---------- INPUT ----------
-document.addEventListener("keydown",e=>{
-    ac.resume();
-    if(e.code==="Space"){
-        if(!started){ started=true; return; }
-        const now=Date.now();
-        tapCount = now-lastTap<400 ? tapCount+1 : 1;
-        lastTap=now;
-        if(tapCount>=2 && !canFly){ canFly=true; tapCount=0; }
-        else dino.jumpUp();
-    }
-    if(e.code==="ArrowUp") keys.up=true;
-    if(e.code==="ArrowDown") keys.down=true;
-    if(e.code==="KeyR" && gameOver) location.reload();
-});
-document.addEventListener("keyup",e=>{
-    if(e.code==="ArrowUp") keys.up=false;
-    if(e.code==="ArrowDown") keys.down=false;
-});
-c.addEventListener("click",()=>{
-    ac.resume();
-    if(!started){ started=true; return; }
-    dino.jumpUp();
-});
+        function spawnCactus() {
+            if (Math.random() > 0.5) obstacles.push(new Cactus());
+        }
+        
+        function spawnPtero() {
+            if (Math.random() > 0.7) obstacles.push(new Ptero());
+        }
+        
+        function gameLoop() {
+            frame++;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-loop();
-</script>
+            drawSky();
+            drawCelestial();
+            
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0,0,0,0.6)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '30px Arial';
+                ctx.fillText('GAME OVER', canvas.width / 2 - 80, canvas.height / 2);
+                ctx.fillText(`Score: ${score}`, canvas.width / 2 - 70, canvas.height / 2 + 40);
+            }
+
+            if (started) {
+                if (frame % nextSpawn === 0) {
+                    spawnCactus();
+                    spawnPtero();
+                }
+
+                if (!gameOver) {
+                    obstacles.forEach((obstacle) => {
+                        obstacle.update();
+                        obstacle.draw();
+                        if (obstacle.hits(dino)) gameOver = true;
+                    });
+
+                    score++;
+                }
+            }
+
+            dino.update();
+            dino.draw();
+
+            if (gameOver && score > highScore) {
+                highScore = score;
+                localStorage.setItem('highScore', highScore);
+            }
+
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.fillText('Score: ' + score, 20, 30);
+            ctx.fillText('Highscore: ' + highScore, 20, 60);
+
+            if (frame % 120 === 0) {
+                dayTime += 0.01;
+                if (dayTime > 3.14) dayTime = 0;
+            }
+            
+            if (gameOver && spacePress > lastSpace + 1) {
+                gameOver = false;
+                obstacles = [];
+                score = 0;
+                spacePress = 0;
+                dino.y = GROUND;
+                dino.dy = 0;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'Space' && !gameOver && !dino.jump) {
+                dino.doJump();
+            }
+        });
+
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowUp') keys.up = true;
+            if (e.code === 'ArrowDown') keys.down = true;
+            if (e.code === 'Enter' && !started) started = true;
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowUp') keys.up = false;
+            if (e.code === 'ArrowDown') keys.down = false;
+        });
+
+        gameLoop();
+    </script>
 </body>
 </html>
