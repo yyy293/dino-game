@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Epic Dino Game</title>
+    <title>Epic Dino Adventure</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
@@ -24,14 +24,23 @@
             margin-top: 20px;
             color: #fff;
             text-align: center;
-            font-size: 14px;
-            opacity: 0.8;
+            font-size: 13px;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+        .key {
+            background: rgba(255,255,255,0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
         }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
-    <div id="info">🦖 SPACE×2 for Flight Mode | ↑↓ to move | R to toggle invincibility</div>
+    <div id="info">
+        🦖 <span class="key">SPACE×2</span> Flight Mode | <span class="key">↑↓</span> Move | <span class="key">R</span> Toggle Shield | Biomes change every 20 seconds!
+    </div>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -50,7 +59,7 @@
         let particles = [];
         let trees = [];
         let clouds = [];
-        let dayTime = Math.PI * 0.3;
+        let dayTime = Math.PI * 0.25;
         let mountains = 0;
         let biome = 'forest';
         let biomeTimer = 0;
@@ -65,7 +74,7 @@
         
         let keys = { up: false, down: false };
 
-        
+        // Audio
         const applauseAudio = new Audio();
         applauseAudio.src = 'aplausos_2.mp3';
         applauseAudio.volume = 0.5;
@@ -85,8 +94,7 @@
             stars.push({
                 x: Math.random() * canvas.width,
                 y: Math.random() * 100,
-                size: Math.random() * 2,
-                speed: Math.random() * 0.5 + 0.2,
+                size: Math.random() * 2 + 0.5,
                 twinkle: Math.random() * Math.PI * 2
             });
         }
@@ -106,6 +114,10 @@
                 osc.start(now);
                 osc.stop(now + 0.2);
             } catch(e) {}
+        }
+
+        function isDark() {
+            return Math.sin(dayTime) < 0;
         }
 
         const dino = {
@@ -136,7 +148,7 @@
                 ctx.save();
                 
                 const baseColor = canFly ? '#00CED1' : '#8FBC8F';
-                const darkColor = canFly ? '#008B8B' : '#6B8E23';
+                const darkColor = canFly ? '#008B8B' : '#556B2F';
                 const lightColor = canFly ? '#AFEEEE' : '#9ACD32';
                 const accentColor = canFly ? '#FFD700' : '#FF6347';
                 
@@ -146,15 +158,13 @@
                 ctx.ellipse(this.x + 22, GROUND + 50, 22, 5, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Glow when flying
+                // Flight glow
                 if (canFly) {
-                    const glowGrad = ctx.createRadialGradient(this.x + 22, this.y + 23, 0, this.x + 22, this.y + 23, 35);
-                    glowGrad.addColorStop(0, 'rgba(0,206,209,0.3)');
+                    const glowGrad = ctx.createRadialGradient(this.x + 22, this.y + 23, 0, this.x + 22, this.y + 23, 40);
+                    glowGrad.addColorStop(0, 'rgba(0,206,209,0.4)');
                     glowGrad.addColorStop(1, 'rgba(0,206,209,0)');
                     ctx.fillStyle = glowGrad;
-                    ctx.beginPath();
-                    ctx.arc(this.x + 22, this.y + 23, 35, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.fillRect(this.x - 18, this.y - 17, 80, 80);
                 }
                 
                 // Body gradient
@@ -166,136 +176,113 @@
                 // Main body
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
-                ctx.roundRect(this.x + 18, this.y, 24, 24, 4);
+                ctx.ellipse(this.x + 28, this.y + 14, 16, 12, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Body scales/texture
+                // Scales
                 ctx.fillStyle = darkColor;
                 for (let i = 0; i < 3; i++) {
                     for (let j = 0; j < 3; j++) {
                         ctx.beginPath();
-                        ctx.arc(this.x + 22 + j * 6, this.y + 5 + i * 7, 2, 0, Math.PI * 2);
+                        ctx.arc(this.x + 20 + j * 6, this.y + 8 + i * 6, 1.5, 0, Math.PI * 2);
                         ctx.fill();
                     }
                 }
                 
                 // Neck
                 ctx.fillStyle = bodyGrad;
-                ctx.beginPath();
-                ctx.roundRect(this.x + 35, this.y + 8, 8, 14, 3);
-                ctx.fill();
+                ctx.fillRect(this.x + 36, this.y + 10, 7, 12);
                 
                 // Head
-                ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
-                ctx.roundRect(this.x + 35, this.y, 18, 12, 4);
+                ctx.ellipse(this.x + 44, this.y + 7, 10, 7, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
                 // Snout
                 ctx.fillStyle = darkColor;
-                ctx.beginPath();
-                ctx.roundRect(this.x + 50, this.y + 5, 4, 5, 2);
-                ctx.fill();
+                ctx.fillRect(this.x + 50, this.y + 6, 4, 4);
                 
                 // Nostril
                 ctx.fillStyle = '#000';
-                ctx.fillRect(this.x + 51, this.y + 6, 1, 1);
+                ctx.fillRect(this.x + 52, this.y + 7, 1, 1);
                 
                 // Eye socket
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 ctx.beginPath();
-                ctx.arc(this.x + 45, this.y + 5, 3.5, 0, Math.PI * 2);
+                ctx.arc(this.x + 46, this.y + 6, 3.5, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Eye white
+                // Eye
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
-                ctx.arc(this.x + 45, this.y + 5, 3, 0, Math.PI * 2);
+                ctx.arc(this.x + 46, this.y + 6, 3, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Pupil
                 ctx.fillStyle = '#000';
                 ctx.beginPath();
-                ctx.arc(this.x + 45.5, this.y + 5, 1.8, 0, Math.PI * 2);
+                ctx.arc(this.x + 46.5, this.y + 6, 1.8, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Eye shine
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
-                ctx.arc(this.x + 44.5, this.y + 4, 0.8, 0, Math.PI * 2);
+                ctx.arc(this.x + 45.5, this.y + 5, 0.8, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Spikes on back
+                // Spikes
                 ctx.fillStyle = accentColor;
                 for (let i = 0; i < 5; i++) {
                     ctx.beginPath();
-                    ctx.moveTo(this.x + 20 + i * 5, this.y - 2);
-                    ctx.lineTo(this.x + 22 + i * 5, this.y - 5);
-                    ctx.lineTo(this.x + 24 + i * 5, this.y - 2);
+                    ctx.moveTo(this.x + 18 + i * 5, this.y + 2);
+                    ctx.lineTo(this.x + 20 + i * 5, this.y - 3);
+                    ctx.lineTo(this.x + 22 + i * 5, this.y + 2);
                     ctx.fill();
                 }
                 
                 // Tail
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
-                ctx.moveTo(this.x + 18, this.y + 10);
-                ctx.quadraticCurveTo(this.x + 5, this.y + 12, this.x, this.y + 18);
-                ctx.lineTo(this.x + 2, this.y + 22);
-                ctx.quadraticCurveTo(this.x + 8, this.y + 20, this.x + 18, this.y + 18);
+                ctx.moveTo(this.x + 18, this.y + 14);
+                ctx.quadraticCurveTo(this.x + 8, this.y + 16, this.x, this.y + 20);
+                ctx.lineTo(this.x + 2, this.y + 23);
+                ctx.quadraticCurveTo(this.x + 10, this.y + 20, this.x + 18, this.y + 18);
                 ctx.fill();
                 
                 // Tail spikes
                 ctx.fillStyle = accentColor;
                 for (let i = 0; i < 3; i++) {
                     ctx.beginPath();
-                    ctx.moveTo(this.x + 4 + i * 6, this.y + 16);
-                    ctx.lineTo(this.x + 5 + i * 6, this.y + 13);
-                    ctx.lineTo(this.x + 6 + i * 6, this.y + 16);
+                    ctx.moveTo(this.x + 3 + i * 6, this.y + 18);
+                    ctx.lineTo(this.x + 4 + i * 6, this.y + 15);
+                    ctx.lineTo(this.x + 5 + i * 6, this.y + 18);
                     ctx.fill();
                 }
                 
-                // Belly highlight
+                // Belly
                 ctx.fillStyle = 'rgba(255,255,255,0.2)';
                 ctx.beginPath();
-                ctx.ellipse(this.x + 28, this.y + 16, 10, 6, 0, 0, Math.PI * 2);
+                ctx.ellipse(this.x + 28, this.y + 18, 10, 5, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Arms (small)
+                // Arms
                 ctx.fillStyle = darkColor;
-                ctx.fillRect(this.x + 26, this.y + 14, 3, 8);
-                ctx.fillRect(this.x + 36, this.y + 14, 3, 8);
+                ctx.fillRect(this.x + 24, this.y + 16, 3, 7);
+                ctx.fillRect(this.x + 38, this.y + 16, 3, 7);
                 
-                // Claws on arms
-                ctx.fillStyle = '#000';
-                ctx.fillRect(this.x + 26, this.y + 21, 1, 2);
-                ctx.fillRect(this.x + 28, this.y + 21, 1, 2);
-                ctx.fillRect(this.x + 36, this.y + 21, 1, 2);
-                ctx.fillRect(this.x + 38, this.y + 21, 1, 2);
+                // Legs
+                const legX1 = this.leg === 0 ? 20 : 22;
+                const legX2 = this.leg === 0 ? 32 : 30;
                 
-                // Animated legs
                 ctx.fillStyle = darkColor;
-                if (this.leg === 0) {
-                    // Left leg
-                    ctx.fillRect(this.x + 20, this.y + 22, 7, 11);
-                    ctx.fillRect(this.x + 19, this.y + 32, 9, 3);
-                    // Right leg
-                    ctx.fillRect(this.x + 31, this.y + 22, 7, 11);
-                    ctx.fillRect(this.x + 30, this.y + 32, 9, 3);
-                } else {
-                    // Left leg
-                    ctx.fillRect(this.x + 22, this.y + 22, 7, 11);
-                    ctx.fillRect(this.x + 21, this.y + 32, 9, 3);
-                    // Right leg
-                    ctx.fillRect(this.x + 29, this.y + 22, 7, 11);
-                    ctx.fillRect(this.x + 28, this.y + 32, 9, 3);
-                }
+                ctx.fillRect(this.x + legX1, this.y + 24, 7, 11);
+                ctx.fillRect(this.x + legX1 - 1, this.y + 34, 9, 3);
+                ctx.fillRect(this.x + legX2, this.y + 24, 7, 11);
+                ctx.fillRect(this.x + legX2 - 1, this.y + 34, 9, 3);
                 
                 // Toes
                 ctx.fillStyle = '#000';
-                const legOffset = this.leg === 0 ? 0 : 2;
                 for (let i = 0; i < 3; i++) {
-                    ctx.fillRect(this.x + 19 + legOffset + i * 3, this.y + 34, 1, 2);
-                    ctx.fillRect(this.x + 30 + legOffset + i * 3, this.y + 34, 1, 2);
+                    ctx.fillRect(this.x + legX1 - 1 + i * 3, this.y + 36, 1, 2);
+                    ctx.fillRect(this.x + legX2 - 1 + i * 3, this.y + 36, 1, 2);
                 }
                 
                 ctx.restore();
@@ -304,25 +291,18 @@
                 if (canFly) {
                     ctx.fillStyle = '#FFD700';
                     ctx.font = 'bold 14px Courier';
-                    ctx.textAlign = 'left';
                     ctx.shadowColor = '#000';
                     ctx.shadowBlur = 4;
-                    ctx.fillText('✈️ FLIGHT MODE', this.x - 25, this.y - 15);
+                    ctx.fillText('✈️ FLIGHT', this.x - 20, this.y - 15);
                     ctx.shadowBlur = 0;
                 }
                 
-                // Invincibility shield
+                // Shield
                 if (invincible) {
-                    ctx.strokeStyle = `rgba(255,215,0,${0.3 + Math.sin(frame * 0.2) * 0.3})`;
+                    ctx.strokeStyle = `rgba(255,215,0,${0.4 + Math.sin(frame * 0.2) * 0.3})`;
                     ctx.lineWidth = 3;
                     ctx.beginPath();
-                    ctx.arc(this.x + 22, this.y + 23, 32, 0, Math.PI * 2);
-                    ctx.stroke();
-                    
-                    ctx.strokeStyle = `rgba(255,215,0,${0.2 + Math.sin(frame * 0.2 + 1) * 0.2})`;
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.arc(this.x + 22, this.y + 23, 35, 0, Math.PI * 2);
+                    ctx.arc(this.x + 22, this.y + 23, 32 + Math.sin(frame * 0.1) * 2, 0, Math.PI * 2);
                     ctx.stroke();
                 }
             },
@@ -352,119 +332,57 @@
             draw() {
                 ctx.save();
                 
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.25)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 16, GROUND + 49, 14, 4, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Cactus colors based on biome
-                let mainColor, darkColor, lightColor;
-                if (biome === 'desert') {
-                    mainColor = '#2E7D32';
-                    darkColor = '#1B5E20';
-                    lightColor = '#4CAF50';
-                } else if (biome === 'snow') {
-                    mainColor = '#1B5E20';
-                    darkColor = '#0D3D0D';
-                    lightColor = '#2E7D32';
-                } else {
-                    mainColor = '#388E3C';
-                    darkColor = '#1B5E20';
-                    lightColor = '#66BB6A';
-                }
+                let mainColor = biome === 'snow' ? '#1B5E20' : '#388E3C';
+                let darkColor = '#1B5E20';
+                let lightColor = biome === 'snow' ? '#2E7D32' : '#66BB6A';
                 
                 const cactusGrad = ctx.createLinearGradient(this.x, this.y, this.x + this.w, this.y + this.h);
                 cactusGrad.addColorStop(0, lightColor);
-                cactusGrad.addColorStop(0.6, mainColor);
+                cactusGrad.addColorStop(0.5, mainColor);
                 cactusGrad.addColorStop(1, darkColor);
                 
+                ctx.fillStyle = cactusGrad;
+                
                 if (this.type === 0) {
-                    // Tall saguaro
-                    ctx.fillStyle = cactusGrad;
                     ctx.fillRect(this.x + 10, this.y, 14, this.h);
                     ctx.fillRect(this.x + 3, this.y + 14, 8, 22);
-                    ctx.fillRect(this.x + 3, this.y + 14, 5, 26);
                     ctx.fillRect(this.x + 23, this.y + 20, 8, 18);
-                    ctx.fillRect(this.x + 26, this.y + 20, 5, 22);
-                    
-                    // Ribs/texture
-                    ctx.strokeStyle = darkColor;
-                    ctx.lineWidth = 1.5;
-                    for (let i = 0; i < this.h; i += 8) {
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 12, this.y + i);
-                        ctx.lineTo(this.x + 12, this.y + i + 6);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 20, this.y + i + 3);
-                        ctx.lineTo(this.x + 20, this.y + i + 9);
-                        ctx.stroke();
-                    }
-                    
-                    // Spines
-                    ctx.fillStyle = '#1A1A1A';
-                    for (let i = 0; i < this.h; i += 5) {
-                        ctx.fillRect(this.x + 11, this.y + i, 1, 2);
-                        ctx.fillRect(this.x + 21, this.y + i + 2, 1, 2);
-                    }
-                    
                 } else if (this.type === 1) {
-                    // Short barrel cactus
-                    ctx.fillStyle = cactusGrad;
-                    ctx.fillRect(this.x + 6, this.y + 12, 20, this.h - 12);
-                    ctx.fillRect(this.x + 2, this.y + 20, 8, 22);
-                    ctx.fillRect(this.x + 24, this.y + 22, 8, 20);
-                    
-                    // Ribs
-                    ctx.strokeStyle = darkColor;
-                    ctx.lineWidth = 1.5;
-                    for (let i = 12; i < this.h; i += 6) {
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 10, this.y + i);
-                        ctx.lineTo(this.x + 10, this.y + i + 4);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 20, this.y + i + 2);
-                        ctx.lineTo(this.x + 20, this.y + i + 6);
-                        ctx.stroke();
-                    }
-                    
-                    // Flower on top
+                    ctx.fillRect(this.x + 8, this.y + 12, 18, this.h - 12);
+                    ctx.fillRect(this.x + 2, this.y + 20, 7, 22);
+                    ctx.fillRect(this.x + 25, this.y + 22, 7, 20);
                     ctx.fillStyle = '#FF69B4';
                     ctx.beginPath();
-                    ctx.arc(this.x + 16, this.y + 10, 4, 0, Math.PI * 2);
+                    ctx.arc(this.x + 17, this.y + 10, 4, 0, Math.PI * 2);
                     ctx.fill();
-                    
                 } else {
-                    // Multiple arms
                     ctx.fillStyle = cactusGrad;
-                    ctx.fillRect(this.x + 5, this.y + 8, 12, this.h - 8);
-                    ctx.fillRect(this.x + 18, this.y + 12, 12, this.h - 12);
+                    ctx.fillRect(this.x + 6, this.y + 8, 11, this.h - 8);
+                    ctx.fillRect(this.x + 19, this.y + 12, 11, this.h - 12);
                     ctx.fillRect(this.x + 2, this.y + 18, 6, 20);
-                    ctx.fillRect(this.x + 28, this.y + 22, 6, 16);
-                    
-                    // Ribs
-                    ctx.strokeStyle = darkColor;
-                    ctx.lineWidth = 1.5;
-                    for (let i = 8; i < this.h; i += 6) {
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 9, this.y + i);
-                        ctx.lineTo(this.x + 9, this.y + i + 4);
-                        ctx.stroke();
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + 23, this.y + i + 4);
-                        ctx.lineTo(this.x + 23, this.y + i + 8);
-                        ctx.stroke();
-                    }
                 }
                 
-                // Snow on cacti in snow biome
+                ctx.strokeStyle = darkColor;
+                ctx.lineWidth = 1.5;
+                for (let i = 0; i < this.h; i += 6) {
+                    ctx.beginPath();
+                    ctx.moveTo(this.x + 12, this.y + i);
+                    ctx.lineTo(this.x + 12, this.y + i + 4);
+                    ctx.stroke();
+                }
+                
                 if (biome === 'snow') {
                     ctx.fillStyle = '#FFF';
                     ctx.fillRect(this.x + 10, this.y, 14, 3);
-                    ctx.fillRect(this.x + 3, this.y + 14, 8, 3);
-                    ctx.fillRect(this.x + 23, this.y + 20, 8, 3);
+                    if (this.type === 0) {
+                        ctx.fillRect(this.x + 3, this.y + 14, 8, 2);
+                        ctx.fillRect(this.x + 23, this.y + 20, 8, 2);
+                    }
                 }
                 
                 ctx.restore();
@@ -495,7 +413,6 @@
             draw() {
                 ctx.save();
                 
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 26, GROUND + 48, 18, 5, 0, 0, Math.PI * 2);
@@ -504,60 +421,26 @@
                 const wingUp = Math.sin(this.wingAngle) > 0;
                 const wingOffset = Math.sin(this.wingAngle) * 10;
                 
-                // Body colors
                 const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 45, this.y + 25);
                 bodyGrad.addColorStop(0, '#CD853F');
                 bodyGrad.addColorStop(0.5, '#A0522D');
                 bodyGrad.addColorStop(1, '#8B4513');
                 
-                // Wing membrane gradient
-                const wingGrad = ctx.createLinearGradient(this.x, this.y - 12, this.x, this.y + 28);
-                wingGrad.addColorStop(0, '#D2691E');
-                wingGrad.addColorStop(1, '#8B4513');
-                
-                // Left wing
-                ctx.fillStyle = wingGrad;
+                // Wings
+                ctx.fillStyle = '#D2691E';
                 ctx.beginPath();
                 ctx.moveTo(this.x + 18, this.y + 12);
                 ctx.quadraticCurveTo(this.x + 8, this.y + 6 - wingOffset, this.x + 4, this.y + 10 - wingOffset);
                 ctx.lineTo(this.x + 6, this.y + 16 - wingOffset * 0.5);
-                ctx.quadraticCurveTo(this.x + 12, this.y + 14, this.x + 16, this.y + 16);
+                ctx.lineTo(this.x + 16, this.y + 16);
                 ctx.fill();
                 
-                // Wing bones
-                ctx.strokeStyle = '#654321';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 16, this.y + 13);
-                ctx.lineTo(this.x + 7, this.y + 8 - wingOffset);
-                ctx.stroke();
-                
-                // Right wing
-                ctx.fillStyle = wingGrad;
                 ctx.beginPath();
                 ctx.moveTo(this.x + 30, this.y + 12);
                 ctx.quadraticCurveTo(this.x + 40, this.y + 6 - wingOffset, this.x + 46, this.y + 10 - wingOffset);
                 ctx.lineTo(this.x + 44, this.y + 16 - wingOffset * 0.5);
-                ctx.quadraticCurveTo(this.x + 36, this.y + 14, this.x + 32, this.y + 16);
+                ctx.lineTo(this.x + 32, this.y + 16);
                 ctx.fill();
-                
-                // Wing bones
-                ctx.beginPath();
-                ctx.moveTo(this.x + 32, this.y + 13);
-                ctx.lineTo(this.x + 43, this.y + 8 - wingOffset);
-                ctx.stroke();
-                
-                // Wing detail lines
-                ctx.strokeStyle = 'rgba(101,67,33,0.4)';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 10, this.y + 11 - wingOffset * 0.7);
-                ctx.lineTo(this.x + 14, this.y + 15);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(this.x + 38, this.y + 11 - wingOffset * 0.7);
-                ctx.lineTo(this.x + 34, this.y + 15);
-                ctx.stroke();
                 
                 // Body
                 ctx.fillStyle = bodyGrad;
@@ -565,21 +448,11 @@
                 ctx.ellipse(this.x + 24, this.y + 14, 14, 7, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Belly texture
+                // Belly
                 ctx.fillStyle = 'rgba(210,180,140,0.5)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 24, this.y + 16, 10, 4, 0, 0, Math.PI * 2);
                 ctx.fill();
-                
-                // Scales on body
-                ctx.fillStyle = 'rgba(139,69,19,0.3)';
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 4; j++) {
-                        ctx.beginPath();
-                        ctx.arc(this.x + 16 + j * 4, this.y + 12 + i * 3, 1, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
                 
                 // Head
                 ctx.fillStyle = bodyGrad;
@@ -593,16 +466,7 @@
                 ctx.moveTo(this.x + 36, this.y + 6);
                 ctx.lineTo(this.x + 40, this.y + 3);
                 ctx.lineTo(this.x + 42, this.y + 8);
-                ctx.lineTo(this.x + 38, this.y + 9);
                 ctx.fill();
-                
-                // Crest detail
-                ctx.strokeStyle = '#8B0000';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 38, this.y + 7);
-                ctx.lineTo(this.x + 40, this.y + 4);
-                ctx.stroke();
                 
                 // Beak
                 ctx.fillStyle = '#DAA520';
@@ -612,36 +476,170 @@
                 ctx.lineTo(this.x + 42, this.y + 13);
                 ctx.fill();
                 
-                // Beak detail
-                ctx.strokeStyle = '#B8860B';
-                ctx.lineWidth = 1;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 42, this.y + 12);
-                ctx.lineTo(this.x + 48, this.y + 12);
-                ctx.stroke();
-                
-                // Eye socket
-                ctx.fillStyle = 'rgba(0,0,0,0.3)';
-                ctx.beginPath();
-                ctx.arc(this.x + 38, this.y + 11, 3, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Eye white
+                // Eye
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
                 ctx.arc(this.x + 38, this.y + 11, 2.5, 0, Math.PI * 2);
                 ctx.fill();
-                
-                // Pupil
                 ctx.fillStyle = '#000';
                 ctx.beginPath();
                 ctx.arc(this.x + 38.5, this.y + 11, 1.5, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Eye shine
-                ctx.fillStyle = '#FFF';
+                // Tail
+                ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
-                ctx.arc(this.x + 37.5, this.y + 10.5, 0.7, 0, Math.PI * 2);
+                ctx.moveTo(this.x + 10, this.y + 12);
+                ctx.lineTo(this.x + 5, this.y + 14);
+                ctx.lineTo(this.x + 8, this.y + 10);
+                ctx.lineTo(this.x + 4, this.y + 8);
+                ctx.lineTo(this.x + 10, this.y + 10);
                 ctx.fill();
                 
-                //
+                ctx.restore();
+            }
+            
+            hits(d) {
+                return d.x < this.x + this.w - 10 &&
+                       d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 8 &&
+                       d.y + d.h - 8 > this.y;
+            }
+        }
+
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.vx = -speed * 0.8 - Math.random() * 2;
+                this.vy = (Math.random() - 0.5) * 4;
+                this.life = 30;
+                this.size = 1 + Math.random() * 2;
+            }
+            
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vy += 0.1;
+                this.life--;
+            }
+            
+            draw() {
+                ctx.fillStyle = `rgba(139,115,85,${this.life / 30})`;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        class Tree {
+            constructor(x, layer) {
+                this.x = x;
+                this.layer = layer;
+                this.h = 40 + Math.random() * 30;
+                this.w = 15 + Math.random() * 10;
+                this.biomeType = biome;
+            }
+            
+            update() {
+                this.x -= speed * (this.layer === 0 ? 0.3 : 0.5);
+            }
+            
+            draw() {
+                ctx.globalAlpha = this.layer === 0 ? 0.3 : 0.5;
+                
+                const baseY = GROUND + 47;
+                const trunkW = this.w * 0.35;
+                const trunkX = this.x + this.w / 2 - trunkW / 2;
+                
+                if (this.biomeType === 'desert') {
+                    // Palm tree
+                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
+                    trunkGrad.addColorStop(0, '#8B7355');
+                    trunkGrad.addColorStop(1, '#654321');
+                    ctx.fillStyle = trunkGrad;
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    // Palm leaves
+                    ctx.fillStyle = '#228B22';
+                    for (let i = 0; i < 6; i++) {
+                        const angle = (i / 6) * Math.PI * 2;
+                        ctx.save();
+                        ctx.translate(this.x + this.w / 2, baseY - this.h - 5);
+                        ctx.rotate(angle);
+                        ctx.beginPath();
+                        ctx.ellipse(0, -15, 5, 15, 0, 0, Math.PI * 2);
+                        ctx.fill();
+                        ctx.restore();
+                    }
+                    
+                } else if (this.biomeType === 'snow') {
+                    // Snowy pine
+                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
+                    trunkGrad.addColorStop(0, '#5C4033');
+                    trunkGrad.addColorStop(1, '#3E2723');
+                    ctx.fillStyle = trunkGrad;
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    ctx.fillStyle = '#1B5E20';
+                    for (let i = 0; i < 4; i++) {
+                        const y = baseY - this.h - 8 + i * 10;
+                        const w = this.w * (1.3 - i * 0.25);
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.w / 2, y - 12);
+                        ctx.lineTo(this.x + this.w / 2 - w / 2, y);
+                        ctx.lineTo(this.x + this.w / 2 + w / 2, y);
+                        ctx.fill();
+                        
+                        ctx.fillStyle = '#FFF';
+                        ctx.beginPath();
+                        ctx.moveTo(this.x + this.w / 2, y - 12);
+                        ctx.lineTo(this.x + this.w / 2 - w / 4, y - 8);
+                        ctx.lineTo(this.x + this.w / 2 + w / 4, y - 8);
+                        ctx.fill();
+                        ctx.fillStyle = '#1B5E20';
+                    }
+                    
+                } else {
+                    // Regular tree
+                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
+                    trunkGrad.addColorStop(0, '#5C4033');
+                    trunkGrad.addColorStop(1, '#3E2723');
+                    ctx.fillStyle = trunkGrad;
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    const leafGrad = ctx.createRadialGradient(
+                        this.x + this.w / 2, baseY - this.h - 10, 0,
+                        this.x + this.w / 2, baseY - this.h - 10, this.w
+                    );
+                    leafGrad.addColorStop(0, '#4CAF50');
+                    leafGrad.addColorStop(0.7, '#2E7D32');
+                    leafGrad.addColorStop(1, '#1B5E20');
+                    ctx.fillStyle = leafGrad;
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.7, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 - this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(this.x + this.w / 2 + this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Cloud {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.w = 100;
+                this.puffs = [
+                    { x: 0, y: 0, r: 22 },
+                    { x: 30, y: -5, r: 28 },
+                    { x: 60, y:
