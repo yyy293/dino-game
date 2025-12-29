@@ -69,12 +69,10 @@
         let invincible = false;
         let spacePress = 0;
         let lastSpace = 0;
-        let flightSpeed = 25;
         let lastMilestone = 0;
         
         let keys = { up: false, down: false };
 
-        // Audio
         const applauseAudio = new Audio();
         applauseAudio.src = 'aplausos_2.mp3';
         applauseAudio.volume = 0.5;
@@ -89,7 +87,6 @@
         
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-        // Generate stars
         for (let i = 0; i < 80; i++) {
             stars.push({
                 x: Math.random() * canvas.width,
@@ -126,6 +123,8 @@
             
             update() {
                 if (canFly) {
+                    if (keys.up) this.targetY = Math.max(20, this.targetY - 8);
+                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + 8);
                     const diff = this.targetY - this.y;
                     this.y += diff * 0.5;
                     this.dy = 0;
@@ -152,13 +151,11 @@
                 const lightColor = canFly ? '#AFEEEE' : '#9ACD32';
                 const accentColor = canFly ? '#FFD700' : '#FF6347';
                 
-                // Shadow
                 ctx.fillStyle = 'rgba(0,0,0,0.25)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 22, GROUND + 50, 22, 5, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Flight glow
                 if (canFly) {
                     const glowGrad = ctx.createRadialGradient(this.x + 22, this.y + 23, 0, this.x + 22, this.y + 23, 40);
                     glowGrad.addColorStop(0, 'rgba(0,206,209,0.4)');
@@ -167,19 +164,16 @@
                     ctx.fillRect(this.x - 18, this.y - 17, 80, 80);
                 }
                 
-                // Body gradient
                 const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 44, this.y + 47);
                 bodyGrad.addColorStop(0, lightColor);
                 bodyGrad.addColorStop(0.5, baseColor);
                 bodyGrad.addColorStop(1, darkColor);
                 
-                // Main body
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.ellipse(this.x + 28, this.y + 14, 16, 12, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Scales
                 ctx.fillStyle = darkColor;
                 for (let i = 0; i < 3; i++) {
                     for (let j = 0; j < 3; j++) {
@@ -189,30 +183,24 @@
                     }
                 }
                 
-                // Neck
                 ctx.fillStyle = bodyGrad;
                 ctx.fillRect(this.x + 36, this.y + 10, 7, 12);
                 
-                // Head
                 ctx.beginPath();
                 ctx.ellipse(this.x + 44, this.y + 7, 10, 7, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Snout
                 ctx.fillStyle = darkColor;
                 ctx.fillRect(this.x + 50, this.y + 6, 4, 4);
                 
-                // Nostril
                 ctx.fillStyle = '#000';
                 ctx.fillRect(this.x + 52, this.y + 7, 1, 1);
                 
-                // Eye socket
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 ctx.beginPath();
                 ctx.arc(this.x + 46, this.y + 6, 3.5, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Eye
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
                 ctx.arc(this.x + 46, this.y + 6, 3, 0, Math.PI * 2);
@@ -228,7 +216,6 @@
                 ctx.arc(this.x + 45.5, this.y + 5, 0.8, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Spikes
                 ctx.fillStyle = accentColor;
                 for (let i = 0; i < 5; i++) {
                     ctx.beginPath();
@@ -238,7 +225,6 @@
                     ctx.fill();
                 }
                 
-                // Tail
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.moveTo(this.x + 18, this.y + 14);
@@ -247,7 +233,6 @@
                 ctx.quadraticCurveTo(this.x + 10, this.y + 20, this.x + 18, this.y + 18);
                 ctx.fill();
                 
-                // Tail spikes
                 ctx.fillStyle = accentColor;
                 for (let i = 0; i < 3; i++) {
                     ctx.beginPath();
@@ -257,28 +242,23 @@
                     ctx.fill();
                 }
                 
-                // Belly
                 ctx.fillStyle = 'rgba(255,255,255,0.2)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 28, this.y + 18, 10, 5, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Arms
                 ctx.fillStyle = darkColor;
                 ctx.fillRect(this.x + 24, this.y + 16, 3, 7);
                 ctx.fillRect(this.x + 38, this.y + 16, 3, 7);
                 
-                // Legs
                 const legX1 = this.leg === 0 ? 20 : 22;
                 const legX2 = this.leg === 0 ? 32 : 30;
                 
-                ctx.fillStyle = darkColor;
                 ctx.fillRect(this.x + legX1, this.y + 24, 7, 11);
                 ctx.fillRect(this.x + legX1 - 1, this.y + 34, 9, 3);
                 ctx.fillRect(this.x + legX2, this.y + 24, 7, 11);
                 ctx.fillRect(this.x + legX2 - 1, this.y + 34, 9, 3);
                 
-                // Toes
                 ctx.fillStyle = '#000';
                 for (let i = 0; i < 3; i++) {
                     ctx.fillRect(this.x + legX1 - 1 + i * 3, this.y + 36, 1, 2);
@@ -287,7 +267,6 @@
                 
                 ctx.restore();
                 
-                // Flight indicator
                 if (canFly) {
                     ctx.fillStyle = '#FFD700';
                     ctx.font = 'bold 14px Courier';
@@ -297,7 +276,6 @@
                     ctx.shadowBlur = 0;
                 }
                 
-                // Shield
                 if (invincible) {
                     ctx.strokeStyle = `rgba(255,215,0,${0.4 + Math.sin(frame * 0.2) * 0.3})`;
                     ctx.lineWidth = 3;
@@ -325,26 +303,19 @@
                 this.type = Math.floor(Math.random() * 3);
             }
             
-            update() {
-                this.x -= speed;
-            }
+            update() { this.x -= speed; }
             
             draw() {
                 ctx.save();
-                
                 ctx.fillStyle = 'rgba(0,0,0,0.25)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 16, GROUND + 49, 14, 4, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                let mainColor = biome === 'snow' ? '#1B5E20' : '#388E3C';
-                let darkColor = '#1B5E20';
-                let lightColor = biome === 'snow' ? '#2E7D32' : '#66BB6A';
-                
                 const cactusGrad = ctx.createLinearGradient(this.x, this.y, this.x + this.w, this.y + this.h);
-                cactusGrad.addColorStop(0, lightColor);
-                cactusGrad.addColorStop(0.5, mainColor);
-                cactusGrad.addColorStop(1, darkColor);
+                cactusGrad.addColorStop(0, biome === 'snow' ? '#2E7D32' : '#66BB6A');
+                cactusGrad.addColorStop(0.5, biome === 'snow' ? '#1B5E20' : '#388E3C');
+                cactusGrad.addColorStop(1, '#1B5E20');
                 
                 ctx.fillStyle = cactusGrad;
                 
@@ -367,32 +338,16 @@
                     ctx.fillRect(this.x + 2, this.y + 18, 6, 20);
                 }
                 
-                ctx.strokeStyle = darkColor;
-                ctx.lineWidth = 1.5;
-                for (let i = 0; i < this.h; i += 6) {
-                    ctx.beginPath();
-                    ctx.moveTo(this.x + 12, this.y + i);
-                    ctx.lineTo(this.x + 12, this.y + i + 4);
-                    ctx.stroke();
-                }
-                
                 if (biome === 'snow') {
                     ctx.fillStyle = '#FFF';
                     ctx.fillRect(this.x + 10, this.y, 14, 3);
-                    if (this.type === 0) {
-                        ctx.fillRect(this.x + 3, this.y + 14, 8, 2);
-                        ctx.fillRect(this.x + 23, this.y + 20, 8, 2);
-                    }
                 }
-                
                 ctx.restore();
             }
             
             hits(d) {
-                return d.x < this.x + this.w - 6 &&
-                       d.x + d.w - 6 > this.x &&
-                       d.y < this.y + this.h - 6 &&
-                       d.y + d.h - 6 > this.y;
+                return d.x < this.x + this.w - 6 && d.x + d.w - 6 > this.x &&
+                       d.y < this.y + this.h - 6 && d.y + d.h - 6 > this.y;
             }
         }
 
@@ -412,55 +367,39 @@
             
             draw() {
                 ctx.save();
-                
                 ctx.fillStyle = 'rgba(0,0,0,0.2)';
                 ctx.beginPath();
                 ctx.ellipse(this.x + 26, GROUND + 48, 18, 5, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                const wingUp = Math.sin(this.wingAngle) > 0;
                 const wingOffset = Math.sin(this.wingAngle) * 10;
-                
                 const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 45, this.y + 25);
                 bodyGrad.addColorStop(0, '#CD853F');
                 bodyGrad.addColorStop(0.5, '#A0522D');
                 bodyGrad.addColorStop(1, '#8B4513');
                 
-                // Wings
                 ctx.fillStyle = '#D2691E';
                 ctx.beginPath();
                 ctx.moveTo(this.x + 18, this.y + 12);
                 ctx.quadraticCurveTo(this.x + 8, this.y + 6 - wingOffset, this.x + 4, this.y + 10 - wingOffset);
-                ctx.lineTo(this.x + 6, this.y + 16 - wingOffset * 0.5);
                 ctx.lineTo(this.x + 16, this.y + 16);
                 ctx.fill();
                 
                 ctx.beginPath();
                 ctx.moveTo(this.x + 30, this.y + 12);
                 ctx.quadraticCurveTo(this.x + 40, this.y + 6 - wingOffset, this.x + 46, this.y + 10 - wingOffset);
-                ctx.lineTo(this.x + 44, this.y + 16 - wingOffset * 0.5);
                 ctx.lineTo(this.x + 32, this.y + 16);
                 ctx.fill();
                 
-                // Body
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.ellipse(this.x + 24, this.y + 14, 14, 7, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Belly
-                ctx.fillStyle = 'rgba(210,180,140,0.5)';
-                ctx.beginPath();
-                ctx.ellipse(this.x + 24, this.y + 16, 10, 4, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                // Head
-                ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.ellipse(this.x + 36, this.y + 11, 7, 6, 0, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Crest
                 ctx.fillStyle = '#CD5C5C';
                 ctx.beginPath();
                 ctx.moveTo(this.x + 36, this.y + 6);
@@ -468,7 +407,6 @@
                 ctx.lineTo(this.x + 42, this.y + 8);
                 ctx.fill();
                 
-                // Beak
                 ctx.fillStyle = '#DAA520';
                 ctx.beginPath();
                 ctx.moveTo(this.x + 42, this.y + 11);
@@ -476,7 +414,6 @@
                 ctx.lineTo(this.x + 42, this.y + 13);
                 ctx.fill();
                 
-                // Eye
                 ctx.fillStyle = '#FFF';
                 ctx.beginPath();
                 ctx.arc(this.x + 38, this.y + 11, 2.5, 0, Math.PI * 2);
@@ -486,13 +423,10 @@
                 ctx.arc(this.x + 38.5, this.y + 11, 1.5, 0, Math.PI * 2);
                 ctx.fill();
                 
-                // Tail
                 ctx.fillStyle = bodyGrad;
                 ctx.beginPath();
                 ctx.moveTo(this.x + 10, this.y + 12);
                 ctx.lineTo(this.x + 5, this.y + 14);
-                ctx.lineTo(this.x + 8, this.y + 10);
-                ctx.lineTo(this.x + 4, this.y + 8);
                 ctx.lineTo(this.x + 10, this.y + 10);
                 ctx.fill();
                 
@@ -500,10 +434,8 @@
             }
             
             hits(d) {
-                return d.x < this.x + this.w - 10 &&
-                       d.x + d.w - 10 > this.x &&
-                       d.y < this.y + this.h - 8 &&
-                       d.y + d.h - 8 > this.y;
+                return d.x < this.x + this.w - 10 && d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 8 && d.y + d.h - 8 > this.y;
             }
         }
 
@@ -547,20 +479,17 @@
             
             draw() {
                 ctx.globalAlpha = this.layer === 0 ? 0.3 : 0.5;
-                
                 const baseY = GROUND + 47;
                 const trunkW = this.w * 0.35;
                 const trunkX = this.x + this.w / 2 - trunkW / 2;
                 
+                const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
+                trunkGrad.addColorStop(0, '#5C4033');
+                trunkGrad.addColorStop(1, '#3E2723');
+                ctx.fillStyle = trunkGrad;
+                ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                
                 if (this.biomeType === 'desert') {
-                    // Palm tree
-                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
-                    trunkGrad.addColorStop(0, '#8B7355');
-                    trunkGrad.addColorStop(1, '#654321');
-                    ctx.fillStyle = trunkGrad;
-                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                    
-                    // Palm leaves
                     ctx.fillStyle = '#228B22';
                     for (let i = 0; i < 6; i++) {
                         const angle = (i / 6) * Math.PI * 2;
@@ -572,15 +501,7 @@
                         ctx.fill();
                         ctx.restore();
                     }
-                    
                 } else if (this.biomeType === 'snow') {
-                    // Snowy pine
-                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
-                    trunkGrad.addColorStop(0, '#5C4033');
-                    trunkGrad.addColorStop(1, '#3E2723');
-                    ctx.fillStyle = trunkGrad;
-                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                    
                     ctx.fillStyle = '#1B5E20';
                     for (let i = 0; i < 4; i++) {
                         const y = baseY - this.h - 8 + i * 10;
@@ -590,7 +511,6 @@
                         ctx.lineTo(this.x + this.w / 2 - w / 2, y);
                         ctx.lineTo(this.x + this.w / 2 + w / 2, y);
                         ctx.fill();
-                        
                         ctx.fillStyle = '#FFF';
                         ctx.beginPath();
                         ctx.moveTo(this.x + this.w / 2, y - 12);
@@ -599,15 +519,7 @@
                         ctx.fill();
                         ctx.fillStyle = '#1B5E20';
                     }
-                    
                 } else {
-                    // Regular tree
-                    const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
-                    trunkGrad.addColorStop(0, '#5C4033');
-                    trunkGrad.addColorStop(1, '#3E2723');
-                    ctx.fillStyle = trunkGrad;
-                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                    
                     const leafGrad = ctx.createRadialGradient(
                         this.x + this.w / 2, baseY - this.h - 10, 0,
                         this.x + this.w / 2, baseY - this.h - 10, this.w
@@ -616,20 +528,10 @@
                     leafGrad.addColorStop(0.7, '#2E7D32');
                     leafGrad.addColorStop(1, '#1B5E20');
                     ctx.fillStyle = leafGrad;
-                    
                     ctx.beginPath();
                     ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.7, 0, Math.PI * 2);
                     ctx.fill();
-                    
-                    ctx.beginPath();
-                    ctx.arc(this.x + this.w / 2 - this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
-                    ctx.fill();
-                    
-                    ctx.beginPath();
-                    ctx.arc(this.x + this.w / 2 + this.w * 0.4, baseY - this.h - 3, this.w * 0.5, 0, Math.PI * 2);
-                    ctx.fill();
                 }
-                
                 ctx.globalAlpha = 1;
             }
         }
@@ -639,7 +541,82 @@
                 this.x = x;
                 this.y = y;
                 this.w = 100;
-                this.puffs = [
-                    { x: 0, y: 0, r: 22 },
-                    { x: 30, y: -5, r: 28 },
-                    { x: 60, y:
+            }
+            
+            update() {
+                this.x -= speed * 0.2;
+            }
+            
+            draw() {
+                const cloudGrad = ctx.createRadialGradient(this.x + 30, this.y, 0, this.x + 30, this.y, 50);
+                cloudGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                cloudGrad.addColorStop(1, 'rgba(240,240,240,0.6)');
+                ctx.fillStyle = cloudGrad;
+                
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 22, 0, Math.PI * 2);
+                ctx.arc(this.x + 30, this.y - 5, 28, 0, Math.PI * 2);
+                ctx.arc(this.x + 60, this.y, 24, 0, Math.PI * 2);
+                ctx.arc(this.x + 20, this.y + 8, 20, 0, Math.PI * 2);
+                ctx.arc(this.x + 45, this.y + 8, 22, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawSky() {
+            const c = Math.sin(dayTime);
+            let topColor, bottomColor;
+            
+            if (c > 0.5) {
+                topColor = '#87CEEB';
+                bottomColor = '#E0F6FF';
+            } else if (c < -0.5) {
+                topColor = '#0a0a28';
+                bottomColor = '#14143c';
+            } else {
+                const t = (c + 0.5);
+                topColor = `rgb(${Math.floor(135*t+10*(1-t))},${Math.floor(206*t+10*(1-t))},${Math.floor(235*t+40*(1-t))})`;
+                bottomColor = `rgb(${Math.floor(224*t+20*(1-t))},${Math.floor(246*t+20*(1-t))},${Math.floor(255*t+60*(1-t))})`;
+            }
+            
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, topColor);
+            grad.addColorStop(1, bottomColor);
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+
+        function drawCelestial() {
+            const c = Math.sin(dayTime);
+            
+            if (c > 0) {
+                ctx.save();
+                ctx.globalAlpha = Math.min(1, c + 0.3);
+                const y = 35 - c * 15;
+                
+                const sunGlow = ctx.createRadialGradient(700, y, 5, 700, y, 30);
+                sunGlow.addColorStop(0, 'rgba(255,215,0,0.8)');
+                sunGlow.addColorStop(1, 'rgba(255,215,0,0)');
+                ctx.fillStyle = sunGlow;
+                ctx.fillRect(670, y - 30, 60, 60);
+                
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                ctx.arc(700, y, 20, 0, Math.PI * 2);
+                ctx.fill();
+                
+                for (let i = 0; i < 12; i++) {
+                    const a = (i * Math.PI / 6) + frame * 0.02;
+                    ctx.strokeStyle = '#FFD700';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(700 + Math.cos(a) * 25, y + Math.sin(a) * 25);
+                    ctx.lineTo(700 + Math.cos(a) * 35, y + Math.sin(a) * 35);
+                    ctx.stroke();
+                }
+                ctx.restore();
+            }
+            
+            if (c < 0.2) {
+                ctx.save();
+                ctx.globalAlpha = Math.max
