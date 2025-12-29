@@ -48,28 +48,11 @@
         let spacePress = 0;
         let lastSpace = 0;
         let flightSpeed = 12;
-        
+        let flightCount = 0; // Track how many spacebars were pressed
+
         let keys = { up: false, down: false };
 
-        const audio = new (window.AudioContext || window.webkitAudioContext)();
-        
-        function beep(freq) {
-            try {
-                const now = audio.currentTime;
-                const osc = audio.createOscillator();
-                const gain = audio.createGain();
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.connect(gain);
-                gain.connect(audio.destination);
-                osc.start(now);
-                osc.stop(now + 0.2);
-            } catch(e) {
-                console.log('Audio error:', e);
-            }
-        }
-
+        // Function to play sound
         function playSound(src) {
             const sound = new Audio(src);
             sound.play();
@@ -123,13 +106,18 @@
                     ctx.fillRect(this.x + 22, this.y + 22, 6, 10); // Left leg up
                     ctx.fillRect(this.x + 28, this.y + 22, 6, 10); // Right leg up
                 }
+
+                if (canFly) {
+                    ctx.fillStyle = 'orange';
+                    ctx.font = '20px Arial';
+                    ctx.fillText('Flight enabled!', canvas.width / 2 - 75, 30); // Green text for flight
+                }
             },
             
             doJump() {
                 if (!canFly && !this.jump && this.y >= GROUND && !gameOver && started) {
                     this.dy = -11;
                     this.jump = true;
-                    beep(600);
                 }
             }
         };
@@ -202,12 +190,6 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             if (frame % 150 === 0) biomeChange();
-
-            if (canFly) {
-                ctx.fillStyle = 'orange';
-                ctx.font = '20px Arial';
-                ctx.fillText('Flight enabled!', canvas.width / 2 - 75, 30);
-            }
         }
 
         function biomeChange() {
@@ -250,6 +232,8 @@
                 });
 
                 score += canFly ? 0.2 : 0.05; // Slow down score accumulation on the ground
+
+                // Play sound effects for score milestones
                 if (score % 100 === 0 && score !== 0) playSound('Ding.mp3');
                 if (score % 1000 === 0 && score !== 0) playSound('aplauso_2.mp3');
                 if (score % 10000 === 0 && score !== 0) playSound('sorry-audiotrimmer_adesehy.mp3');
@@ -287,6 +271,10 @@
 
         window.addEventListener('keydown', (e) => {
             if (e.code === 'Space') {
+                flightCount++;
+                if (flightCount >= 3) {
+                    canFly = true; // Enable flight after 3 spacebars
+                }
                 if (!gameOver && !dino.jump) {
                     dino.doJump();
                 }
@@ -295,12 +283,18 @@
                     lastSpace = frame;
                 }
             }
-        });
 
-        window.addEventListener('keydown', (e) => {
             if (e.code === 'ArrowUp') keys.up = true;
             if (e.code === 'ArrowDown') keys.down = true;
             if (e.code === 'Enter' && !started) started = true;
+            if (e.code === 'KeyR' && gameOver) {
+                // Restart game when "R" key is pressed
+                gameOver = false;
+                score = 0;
+                dino.y = GROUND;
+                dino.dy = 0;
+                obstacles = [];
+            }
         });
 
         window.addEventListener('keyup', (e) => {
