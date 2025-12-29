@@ -70,6 +70,11 @@
             }
         }
 
+        function playSound(src) {
+            const sound = new Audio(src);
+            sound.play();
+        }
+
         const dino = {
             x: 50, y: GROUND, w: 44, h: 47,
             dy: 0, jump: false, leg: 0, targetY: GROUND,
@@ -244,7 +249,10 @@
                     }
                 });
 
-                score += canFly ? 0.2 : 0.1; // Slow down score accumulation on the ground
+                score += canFly ? 0.2 : 0.05; // Slow down score accumulation on the ground
+                if (score % 100 === 0 && score !== 0) playSound('Ding.mp3');
+                if (score % 1000 === 0 && score !== 0) playSound('aplauso_2.mp3');
+                if (score % 10000 === 0 && score !== 0) playSound('sorry-audiotrimmer_adesehy.mp3');
             }
 
             dino.update();
