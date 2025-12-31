@@ -3,44 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Epic Dino Adventure</title>
+    <title>Dino Game</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             display: flex;
-            flex-direction: column;
             justify-content: center; 
             align-items: center; 
             min-height: 100vh; 
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: #1a1a2e;
             font-family: 'Courier New', monospace;
         }
         canvas { 
-            box-shadow: 0 15px 40px rgba(0,0,0,0.6);
-            border-radius: 10px;
-            border: 3px solid rgba(255,255,255,0.1);
-        }
-        #info {
-            margin-top: 20px;
-            color: #fff;
-            text-align: center;
-            font-size: 13px;
-            opacity: 0.9;
-            line-height: 1.6;
-        }
-        .key {
-            background: rgba(255,255,255,0.2);
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: bold;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
         }
     </style>
 </head>
 <body>
     <canvas id="game"></canvas>
-    <div id="info">
-        🦖 <span class="key">SPACE×2</span> Flight Mode | <span class="key">↑↓</span> Move | <span class="key">R</span> Toggle Shield | Biomes change every 20 seconds!
-    </div>
     <script>
         const canvas = document.getElementById('game');
         const ctx = canvas.getContext('2d');
@@ -59,62 +39,53 @@
         let particles = [];
         let trees = [];
         let clouds = [];
-        let dayTime = Math.PI * 0.25;
         let mountains = 0;
+        let dayTime = 0;
         let biome = 'forest';
         let biomeTimer = 0;
-        let stars = [];
         
         let canFly = false;
         let invincible = false;
         let spacePress = 0;
         let lastSpace = 0;
-        let lastMilestone = 0;
+        let flightSpeed = 12;
+        let mph = 0;
         
         let keys = { up: false, down: false };
 
+        // Audio with error handling
+        let audioLoaded = false;
+        const noiceAudio = new Audio();
         const applauseAudio = new Audio();
-        applauseAudio.src = 'aplausos_2.mp3';
-        applauseAudio.volume = 0.5;
-        
-        const celebrationAudio = new Audio();
-        celebrationAudio.src = 'audiotrimmer_adesehy.mp3';
-        celebrationAudio.volume = 0.5;
-        
         const deathAudio = new Audio();
-        deathAudio.src = 'directed-by-robert-b_voI2Z4T.mp3';
-        deathAudio.volume = 0.5;
         
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-
-        for (let i = 0; i < 80; i++) {
-            stars.push({
-                x: Math.random() * canvas.width,
-                y: Math.random() * 100,
-                size: Math.random() * 2 + 0.5,
-                twinkle: Math.random() * Math.PI * 2
-            });
+        try {
+            noiceAudio.src = 'audiotrimmer_adesehy.mp3';
+            applauseAudio.src = 'aplausos_2.mp3';
+            deathAudio.src = 'directed-by-robert-b_voI2Z4T.mp3';
+            noiceAudio.volume = 0.5;
+            applauseAudio.volume = 0.5;
+            deathAudio.volume = 0.5;
+            audioLoaded = true;
+        } catch(e) {
+            console.log('Audio files not found, using fallback sounds');
         }
+        
+        const audio = new (window.AudioContext || window.webkitAudioContext)();
 
         function beep(freq) {
             try {
-                if (audioCtx.state === 'suspended') audioCtx.resume();
-                const now = audioCtx.currentTime;
-                const osc = audioCtx.createOscillator();
-                const gain = audioCtx.createGain();
-                osc.type = 'sine';
+                const now = audio.currentTime;
+                const osc = audio.createOscillator();
+                const gain = audio.createGain();
                 osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.setValueAtTime(0.1, now);
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
                 osc.connect(gain);
-                gain.connect(audioCtx.destination);
+                gain.connect(audio.destination);
                 osc.start(now);
                 osc.stop(now + 0.2);
             } catch(e) {}
-        }
-
-        function isDark() {
-            return Math.sin(dayTime) < 0;
         }
 
         const dino = {
@@ -123,10 +94,9 @@
             
             update() {
                 if (canFly) {
-                    if (keys.up) this.targetY = Math.max(20, this.targetY - 8);
-                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + 8);
-                    const diff = this.targetY - this.y;
-                    this.y += diff * 0.5;
+                    if (keys.up) this.targetY = Math.max(20, this.targetY - flightSpeed);
+                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + flightSpeed);
+                    this.y += (this.targetY - this.y) * 0.4;
                     this.dy = 0;
                 } else {
                     this.dy += 0.6;
@@ -144,144 +114,54 @@
             },
             
             draw() {
-                ctx.save();
+                if (invincible && Math.floor(frame / 8) % 2) {
+                    ctx.globalAlpha = 0.5;
+                }
                 
-                const baseColor = canFly ? '#00CED1' : '#8FBC8F';
-                const darkColor = canFly ? '#008B8B' : '#556B2F';
-                const lightColor = canFly ? '#AFEEEE' : '#9ACD32';
-                const accentColor = canFly ? '#FFD700' : '#FF6347';
+                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
                 
-                ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                ctx.beginPath();
-                ctx.ellipse(this.x + 22, GROUND + 50, 22, 5, 0, 0, Math.PI * 2);
-                ctx.fill();
+                // Body
+                ctx.fillRect(this.x + 20, this.y, 22, 22);
+                // Neck
+                ctx.fillRect(this.x + 35, this.y + 10, 7, 12);
+                // Head
+                ctx.fillRect(this.x + 35, this.y + 2, 15, 10);
+                ctx.fillRect(this.x + 48, this.y + 8, 4, 4);
+                // Eye
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 45, this.y + 4, 3, 3);
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x + 46, this.y + 5, 1, 1);
+                
+                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
+                // Tail
+                ctx.fillRect(this.x + 10, this.y + 18, 12, 4);
+                ctx.fillRect(this.x, this.y + 16, 12, 4);
+                ctx.fillRect(this.x, this.y + 14, 4, 4);
+                
+                // Arms
+                ctx.fillRect(this.x + 38, this.y + 18, 4, 6);
+                
+                // Legs
+                if (this.leg === 0) {
+                    ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 20, this.y + 32, 8, 3);
+                    ctx.fillRect(this.x + 30, this.y + 32, 8, 3);
+                } else {
+                    ctx.fillRect(this.x + 22, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 28, this.y + 22, 6, 10);
+                    ctx.fillRect(this.x + 22, this.y + 32, 8, 3);
+                    ctx.fillRect(this.x + 28, this.y + 32, 8, 3);
+                }
+                
+                ctx.globalAlpha = 1;
                 
                 if (canFly) {
-                    const glowGrad = ctx.createRadialGradient(this.x + 22, this.y + 23, 0, this.x + 22, this.y + 23, 40);
-                    glowGrad.addColorStop(0, 'rgba(0,206,209,0.4)');
-                    glowGrad.addColorStop(1, 'rgba(0,206,209,0)');
-                    ctx.fillStyle = glowGrad;
-                    ctx.fillRect(this.x - 18, this.y - 17, 80, 80);
-                }
-                
-                const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 44, this.y + 47);
-                bodyGrad.addColorStop(0, lightColor);
-                bodyGrad.addColorStop(0.5, baseColor);
-                bodyGrad.addColorStop(1, darkColor);
-                
-                ctx.fillStyle = bodyGrad;
-                ctx.beginPath();
-                ctx.ellipse(this.x + 28, this.y + 14, 16, 12, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = darkColor;
-                for (let i = 0; i < 3; i++) {
-                    for (let j = 0; j < 3; j++) {
-                        ctx.beginPath();
-                        ctx.arc(this.x + 20 + j * 6, this.y + 8 + i * 6, 1.5, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-                
-                ctx.fillStyle = bodyGrad;
-                ctx.fillRect(this.x + 36, this.y + 10, 7, 12);
-                
-                ctx.beginPath();
-                ctx.ellipse(this.x + 44, this.y + 7, 10, 7, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = darkColor;
-                ctx.fillRect(this.x + 50, this.y + 6, 4, 4);
-                
-                ctx.fillStyle = '#000';
-                ctx.fillRect(this.x + 52, this.y + 7, 1, 1);
-                
-                ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                ctx.beginPath();
-                ctx.arc(this.x + 46, this.y + 6, 3.5, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#FFF';
-                ctx.beginPath();
-                ctx.arc(this.x + 46, this.y + 6, 3, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#000';
-                ctx.beginPath();
-                ctx.arc(this.x + 46.5, this.y + 6, 1.8, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#FFF';
-                ctx.beginPath();
-                ctx.arc(this.x + 45.5, this.y + 5, 0.8, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = accentColor;
-                for (let i = 0; i < 5; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(this.x + 18 + i * 5, this.y + 2);
-                    ctx.lineTo(this.x + 20 + i * 5, this.y - 3);
-                    ctx.lineTo(this.x + 22 + i * 5, this.y + 2);
-                    ctx.fill();
-                }
-                
-                ctx.fillStyle = bodyGrad;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 18, this.y + 14);
-                ctx.quadraticCurveTo(this.x + 8, this.y + 16, this.x, this.y + 20);
-                ctx.lineTo(this.x + 2, this.y + 23);
-                ctx.quadraticCurveTo(this.x + 10, this.y + 20, this.x + 18, this.y + 18);
-                ctx.fill();
-                
-                ctx.fillStyle = accentColor;
-                for (let i = 0; i < 3; i++) {
-                    ctx.beginPath();
-                    ctx.moveTo(this.x + 3 + i * 6, this.y + 18);
-                    ctx.lineTo(this.x + 4 + i * 6, this.y + 15);
-                    ctx.lineTo(this.x + 5 + i * 6, this.y + 18);
-                    ctx.fill();
-                }
-                
-                ctx.fillStyle = 'rgba(255,255,255,0.2)';
-                ctx.beginPath();
-                ctx.ellipse(this.x + 28, this.y + 18, 10, 5, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = darkColor;
-                ctx.fillRect(this.x + 24, this.y + 16, 3, 7);
-                ctx.fillRect(this.x + 38, this.y + 16, 3, 7);
-                
-                const legX1 = this.leg === 0 ? 20 : 22;
-                const legX2 = this.leg === 0 ? 32 : 30;
-                
-                ctx.fillRect(this.x + legX1, this.y + 24, 7, 11);
-                ctx.fillRect(this.x + legX1 - 1, this.y + 34, 9, 3);
-                ctx.fillRect(this.x + legX2, this.y + 24, 7, 11);
-                ctx.fillRect(this.x + legX2 - 1, this.y + 34, 9, 3);
-                
-                ctx.fillStyle = '#000';
-                for (let i = 0; i < 3; i++) {
-                    ctx.fillRect(this.x + legX1 - 1 + i * 3, this.y + 36, 1, 2);
-                    ctx.fillRect(this.x + legX2 - 1 + i * 3, this.y + 36, 1, 2);
-                }
-                
-                ctx.restore();
-                
-                if (canFly) {
-                    ctx.fillStyle = '#FFD700';
-                    ctx.font = 'bold 14px Courier';
-                    ctx.shadowColor = '#000';
-                    ctx.shadowBlur = 4;
-                    ctx.fillText('✈️ FLIGHT', this.x - 20, this.y - 15);
-                    ctx.shadowBlur = 0;
-                }
-                
-                if (invincible) {
-                    ctx.strokeStyle = `rgba(255,215,0,${0.4 + Math.sin(frame * 0.2) * 0.3})`;
-                    ctx.lineWidth = 3;
-                    ctx.beginPath();
-                    ctx.arc(this.x + 22, this.y + 23, 32 + Math.sin(frame * 0.1) * 2, 0, Math.PI * 2);
-                    ctx.stroke();
+                    ctx.fillStyle = '#FF8C00';
+                    ctx.font = 'bold 16px Courier';
+                    ctx.textAlign = 'left';
+                    ctx.fillText('FLIGHT ENABLED!', this.x - 20, this.y - 10);
                 }
             },
             
@@ -297,145 +177,79 @@
         class Cactus {
             constructor() {
                 this.x = canvas.width;
-                this.w = 32;
-                this.h = 48;
+                this.w = 30;
+                this.h = 45;
                 this.y = GROUND + 47 - this.h;
-                this.type = Math.floor(Math.random() * 3);
             }
             
-            update() { this.x -= speed; }
+            update() {
+                this.x -= speed;
+            }
             
             draw() {
-                ctx.save();
-                ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                ctx.beginPath();
-                ctx.ellipse(this.x + 16, GROUND + 49, 14, 4, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                const cactusGrad = ctx.createLinearGradient(this.x, this.y, this.x + this.w, this.y + this.h);
-                cactusGrad.addColorStop(0, biome === 'snow' ? '#2E7D32' : '#66BB6A');
-                cactusGrad.addColorStop(0.5, biome === 'snow' ? '#1B5E20' : '#388E3C');
-                cactusGrad.addColorStop(1, '#1B5E20');
-                
-                ctx.fillStyle = cactusGrad;
-                
-                if (this.type === 0) {
-                    ctx.fillRect(this.x + 10, this.y, 14, this.h);
-                    ctx.fillRect(this.x + 3, this.y + 14, 8, 22);
-                    ctx.fillRect(this.x + 23, this.y + 20, 8, 18);
-                } else if (this.type === 1) {
-                    ctx.fillRect(this.x + 8, this.y + 12, 18, this.h - 12);
-                    ctx.fillRect(this.x + 2, this.y + 20, 7, 22);
-                    ctx.fillRect(this.x + 25, this.y + 22, 7, 20);
-                    ctx.fillStyle = '#FF69B4';
-                    ctx.beginPath();
-                    ctx.arc(this.x + 17, this.y + 10, 4, 0, Math.PI * 2);
-                    ctx.fill();
-                } else {
-                    ctx.fillStyle = cactusGrad;
-                    ctx.fillRect(this.x + 6, this.y + 8, 11, this.h - 8);
-                    ctx.fillRect(this.x + 19, this.y + 12, 11, this.h - 12);
-                    ctx.fillRect(this.x + 2, this.y + 18, 6, 20);
+                ctx.fillStyle = '#27ae60';
+                ctx.fillRect(this.x + 12, this.y, 10, this.h);
+                ctx.fillRect(this.x + 4, this.y + 10, 8, 20);
+                ctx.fillRect(this.x + 4, this.y + 10, 4, 25);
+                ctx.fillRect(this.x + 22, this.y + 15, 8, 18);
+                ctx.fillRect(this.x + 26, this.y + 15, 4, 22);
+                ctx.fillStyle = '#229954';
+                for (let i = 0; i < this.h; i += 8) {
+                    ctx.fillRect(this.x + 10, this.y + i, 2, 4);
+                    ctx.fillRect(this.x + 22, this.y + i + 4, 2, 4);
                 }
-                
-                if (biome === 'snow') {
-                    ctx.fillStyle = '#FFF';
-                    ctx.fillRect(this.x + 10, this.y, 14, 3);
-                }
-                ctx.restore();
             }
             
             hits(d) {
-                return d.x < this.x + this.w - 6 && d.x + d.w - 6 > this.x &&
-                       d.y < this.y + this.h - 6 && d.y + d.h - 6 > this.y;
+                return d.x < this.x + this.w - 5 &&
+                       d.x + d.w - 5 > this.x &&
+                       d.y < this.y + this.h - 5 &&
+                       d.y + d.h - 5 > this.y;
             }
         }
 
         class Ptero {
             constructor() {
                 this.x = canvas.width;
-                this.w = 52;
-                this.h = 38;
-                this.y = GROUND - 45 - Math.random() * 45;
-                this.wingAngle = 0;
+                this.w = 46;
+                this.h = 40;
+                this.y = GROUND - 35 - Math.random() * 35;
             }
             
             update() {
-                this.x -= speed * 1.15;
-                this.wingAngle += 0.35;
+                this.x -= speed;
             }
             
             draw() {
-                ctx.save();
-                ctx.fillStyle = 'rgba(0,0,0,0.2)';
-                ctx.beginPath();
-                ctx.ellipse(this.x + 26, GROUND + 48, 18, 5, 0, 0, Math.PI * 2);
-                ctx.fill();
+                const wingUp = Math.floor(frame / 8) % 2 === 0;
                 
-                const wingOffset = Math.sin(this.wingAngle) * 10;
-                const bodyGrad = ctx.createLinearGradient(this.x, this.y, this.x + 45, this.y + 25);
-                bodyGrad.addColorStop(0, '#CD853F');
-                bodyGrad.addColorStop(0.5, '#A0522D');
-                bodyGrad.addColorStop(1, '#8B4513');
-                
-                ctx.fillStyle = '#D2691E';
-                ctx.beginPath();
-                ctx.moveTo(this.x + 18, this.y + 12);
-                ctx.quadraticCurveTo(this.x + 8, this.y + 6 - wingOffset, this.x + 4, this.y + 10 - wingOffset);
-                ctx.lineTo(this.x + 16, this.y + 16);
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.moveTo(this.x + 30, this.y + 12);
-                ctx.quadraticCurveTo(this.x + 40, this.y + 6 - wingOffset, this.x + 46, this.y + 10 - wingOffset);
-                ctx.lineTo(this.x + 32, this.y + 16);
-                ctx.fill();
-                
-                ctx.fillStyle = bodyGrad;
-                ctx.beginPath();
-                ctx.ellipse(this.x + 24, this.y + 14, 14, 7, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.beginPath();
-                ctx.ellipse(this.x + 36, this.y + 11, 7, 6, 0, 0, Math.PI * 2);
-                ctx.fill();
-                
-                ctx.fillStyle = '#CD5C5C';
-                ctx.beginPath();
-                ctx.moveTo(this.x + 36, this.y + 6);
-                ctx.lineTo(this.x + 40, this.y + 3);
-                ctx.lineTo(this.x + 42, this.y + 8);
-                ctx.fill();
-                
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(this.x + 10, this.y + 8, 20, 8);
+                ctx.fillRect(this.x + 28, this.y + 6, 8, 8);
                 ctx.fillStyle = '#DAA520';
-                ctx.beginPath();
-                ctx.moveTo(this.x + 42, this.y + 11);
-                ctx.lineTo(this.x + 50, this.y + 12);
-                ctx.lineTo(this.x + 42, this.y + 13);
-                ctx.fill();
-                
-                ctx.fillStyle = '#FFF';
-                ctx.beginPath();
-                ctx.arc(this.x + 38, this.y + 11, 2.5, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillRect(this.x + 36, this.y + 8, 6, 4);
                 ctx.fillStyle = '#000';
-                ctx.beginPath();
-                ctx.arc(this.x + 38.5, this.y + 11, 1.5, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.fillRect(this.x + 31, this.y + 8, 2, 2);
                 
-                ctx.fillStyle = bodyGrad;
-                ctx.beginPath();
-                ctx.moveTo(this.x + 10, this.y + 12);
-                ctx.lineTo(this.x + 5, this.y + 14);
-                ctx.lineTo(this.x + 10, this.y + 10);
-                ctx.fill();
+                ctx.fillStyle = '#A0522D';
+                if (wingUp) {
+                    ctx.fillRect(this.x + 8, this.y - 6, 10, 14);
+                    ctx.fillRect(this.x + 22, this.y - 6, 10, 14);
+                } else {
+                    ctx.fillRect(this.x + 8, this.y + 16, 10, 14);
+                    ctx.fillRect(this.x + 22, this.y + 16, 10, 14);
+                }
                 
-                ctx.restore();
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(this.x + 4, this.y + 10, 8, 4);
+                ctx.fillRect(this.x, this.y + 10, 4, 2);
             }
             
             hits(d) {
-                return d.x < this.x + this.w - 10 && d.x + d.w - 10 > this.x &&
-                       d.y < this.y + this.h - 8 && d.y + d.h - 8 > this.y;
+                return d.x < this.x + this.w - 10 &&
+                       d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 10 &&
+                       d.y + d.h - 10 > this.y;
             }
         }
 
@@ -443,23 +257,21 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.vx = -speed * 0.8 - Math.random() * 2;
-                this.vy = (Math.random() - 0.5) * 4;
-                this.life = 30;
-                this.size = 1 + Math.random() * 2;
+                this.vx = -speed * 0.8;
+                this.vy = (Math.random() - 0.5) * 3;
+                this.life = 25;
             }
             
             update() {
                 this.x += this.vx;
                 this.y += this.vy;
-                this.vy += 0.1;
                 this.life--;
             }
             
             draw() {
-                ctx.fillStyle = `rgba(139,115,85,${this.life / 30})`;
+                ctx.fillStyle = `rgba(139,115,85,${this.life/25})`;
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
@@ -468,8 +280,9 @@
             constructor(x, layer) {
                 this.x = x;
                 this.layer = layer;
-                this.h = 40 + Math.random() * 30;
-                this.w = 15 + Math.random() * 10;
+                this.h = 35 + Math.random() * 25;
+                this.w = 12 + Math.random() * 8;
+                this.type = Math.floor(Math.random() * 3);
                 this.biomeType = biome;
             }
             
@@ -478,60 +291,62 @@
             }
             
             draw() {
-                ctx.globalAlpha = this.layer === 0 ? 0.3 : 0.5;
+                const alpha = this.layer === 0 ? 0.3 : 0.5;
+                ctx.globalAlpha = alpha;
+                
                 const baseY = GROUND + 47;
-                const trunkW = this.w * 0.35;
+                const trunkW = this.w * 0.3;
                 const trunkX = this.x + this.w / 2 - trunkW / 2;
                 
-                const trunkGrad = ctx.createLinearGradient(trunkX, baseY - this.h, trunkX + trunkW, baseY);
-                trunkGrad.addColorStop(0, '#5C4033');
-                trunkGrad.addColorStop(1, '#3E2723');
-                ctx.fillStyle = trunkGrad;
-                ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                
                 if (this.biomeType === 'desert') {
-                    ctx.fillStyle = '#228B22';
-                    for (let i = 0; i < 6; i++) {
-                        const angle = (i / 6) * Math.PI * 2;
-                        ctx.save();
-                        ctx.translate(this.x + this.w / 2, baseY - this.h - 5);
-                        ctx.rotate(angle);
-                        ctx.beginPath();
-                        ctx.ellipse(0, -15, 5, 15, 0, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.restore();
-                    }
+                    ctx.fillStyle = '#3d9b4e';
+                    ctx.fillRect(trunkX - 2, baseY - this.h, trunkW + 4, this.h);
+                    ctx.fillRect(trunkX - 8, baseY - this.h * 0.7, 6, this.h * 0.4);
+                    ctx.fillRect(trunkX + trunkW + 2, baseY - this.h * 0.6, 6, this.h * 0.5);
                 } else if (this.biomeType === 'snow') {
-                    ctx.fillStyle = '#1B5E20';
+                    ctx.fillStyle = '#4a3f35';
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    ctx.fillStyle = '#2d6b2d';
                     for (let i = 0; i < 4; i++) {
-                        const y = baseY - this.h - 8 + i * 10;
-                        const w = this.w * (1.3 - i * 0.25);
+                        const y = baseY - this.h - 5 + i * 8;
+                        const w = this.w * (1.2 - i * 0.2);
                         ctx.beginPath();
-                        ctx.moveTo(this.x + this.w / 2, y - 12);
+                        ctx.moveTo(this.x + this.w / 2, y - 10);
                         ctx.lineTo(this.x + this.w / 2 - w / 2, y);
                         ctx.lineTo(this.x + this.w / 2 + w / 2, y);
                         ctx.fill();
-                        ctx.fillStyle = '#FFF';
+                        
+                        ctx.fillStyle = '#FFFFFF';
                         ctx.beginPath();
-                        ctx.moveTo(this.x + this.w / 2, y - 12);
-                        ctx.lineTo(this.x + this.w / 2 - w / 4, y - 8);
-                        ctx.lineTo(this.x + this.w / 2 + w / 4, y - 8);
+                        ctx.moveTo(this.x + this.w / 2, y - 10);
+                        ctx.lineTo(this.x + this.w / 2 - w / 4, y - 6);
+                        ctx.lineTo(this.x + this.w / 2 + w / 4, y - 6);
                         ctx.fill();
-                        ctx.fillStyle = '#1B5E20';
+                        ctx.fillStyle = '#2d6b2d';
                     }
                 } else {
-                    const leafGrad = ctx.createRadialGradient(
-                        this.x + this.w / 2, baseY - this.h - 10, 0,
-                        this.x + this.w / 2, baseY - this.h - 10, this.w
-                    );
-                    leafGrad.addColorStop(0, '#4CAF50');
-                    leafGrad.addColorStop(0.7, '#2E7D32');
-                    leafGrad.addColorStop(1, '#1B5E20');
-                    ctx.fillStyle = leafGrad;
-                    ctx.beginPath();
-                    ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.7, 0, Math.PI * 2);
-                    ctx.fill();
+                    ctx.fillStyle = '#6B4423';
+                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
+                    
+                    ctx.fillStyle = '#2d6b2d';
+                    if (this.type === 0) {
+                        for (let i = 0; i < 4; i++) {
+                            const y = baseY - this.h - 5 + i * 8;
+                            const w = this.w * (1.2 - i * 0.2);
+                            ctx.beginPath();
+                            ctx.moveTo(this.x + this.w / 2, y - 10);
+                            ctx.lineTo(this.x + this.w / 2 - w / 2, y);
+                            ctx.lineTo(this.x + this.w / 2 + w / 2, y);
+                            ctx.fill();
+                        }
+                    } else {
+                        ctx.beginPath();
+                        ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.6, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
                 }
+                
                 ctx.globalAlpha = 1;
             }
         }
@@ -540,7 +355,7 @@
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
-                this.w = 100;
+                this.w = 50;
             }
             
             update() {
@@ -548,61 +363,79 @@
             }
             
             draw() {
-                const cloudGrad = ctx.createRadialGradient(this.x + 30, this.y, 0, this.x + 30, this.y, 50);
-                cloudGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
-                cloudGrad.addColorStop(1, 'rgba(240,240,240,0.6)');
-                ctx.fillStyle = cloudGrad;
-                
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
                 ctx.beginPath();
-                ctx.arc(this.x, this.y, 22, 0, Math.PI * 2);
-                ctx.arc(this.x + 30, this.y - 5, 28, 0, Math.PI * 2);
-                ctx.arc(this.x + 60, this.y, 24, 0, Math.PI * 2);
-                ctx.arc(this.x + 20, this.y + 8, 20, 0, Math.PI * 2);
-                ctx.arc(this.x + 45, this.y + 8, 22, 0, Math.PI * 2);
+                ctx.arc(this.x, this.y, 15, 0, Math.PI * 2);
+                ctx.arc(this.x + 20, this.y, 18, 0, Math.PI * 2);
+                ctx.arc(this.x + 40, this.y, 15, 0, Math.PI * 2);
                 ctx.fill();
             }
         }
 
-        function drawSky() {
+        function isDark() {
+            return Math.sin(dayTime) < 0;
+        }
+
+        function sky() {
             const c = Math.sin(dayTime);
-            let topColor, bottomColor;
+            let base;
             
-            if (c > 0.5) {
-                topColor = '#87CEEB';
-                bottomColor = '#E0F6FF';
-            } else if (c < -0.5) {
-                topColor = '#0a0a28';
-                bottomColor = '#14143c';
+            if (biome === 'desert') {
+                if (c > 0.5) base = { t: '#FFB84D', b: '#FFA500' };
+                else if (c < -0.5) base = { t: '#1a1a3e', b: '#2d2d5c' };
+                else {
+                    const t = (c + 0.5);
+                    base = {
+                        t: `rgb(${Math.floor(255*t+26*(1-t))},${Math.floor(184*t+26*(1-t))},${Math.floor(77*t+62*(1-t))})`,
+                        b: `rgb(${Math.floor(255*t+45*(1-t))},${Math.floor(165*t+45*(1-t))},0)`
+                    };
+                }
+            } else if (biome === 'snow') {
+                if (c > 0.5) base = { t: '#B8C6DB', b: '#E8EEF5' };
+                else if (c < -0.5) base = { t: '#0a0a28', b: '#14143c' };
+                else {
+                    const t = (c + 0.5);
+                    base = {
+                        t: `rgb(${Math.floor(184*t+10*(1-t))},${Math.floor(198*t+10*(1-t))},${Math.floor(219*t+40*(1-t))})`,
+                        b: `rgb(${Math.floor(232*t+20*(1-t))},${Math.floor(238*t+20*(1-t))},${Math.floor(245*t+60*(1-t))})`
+                    };
+                }
             } else {
-                const t = (c + 0.5);
-                topColor = `rgb(${Math.floor(135*t+10*(1-t))},${Math.floor(206*t+10*(1-t))},${Math.floor(235*t+40*(1-t))})`;
-                bottomColor = `rgb(${Math.floor(224*t+20*(1-t))},${Math.floor(246*t+20*(1-t))},${Math.floor(255*t+60*(1-t))})`;
+                if (c > 0.5) base = { t: '#87CEEB', b: '#E0F6FF' };
+                else if (c < -0.5) base = { t: '#0a0a28', b: '#14143c' };
+                else {
+                    const t = (c + 0.5);
+                    base = {
+                        t: `rgb(${Math.floor(135*t+10*(1-t))},${Math.floor(206*t+10*(1-t))},${Math.floor(235*t+40*(1-t))})`,
+                        b: `rgb(${Math.floor(224*t+20*(1-t))},${Math.floor(246*t+20*(1-t))},${Math.floor(255*t+60*(1-t))})`
+                    };
+                }
             }
             
+            return base;
+        }
+
+        function drawSky() {
+            const s = sky();
             const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            grad.addColorStop(0, topColor);
-            grad.addColorStop(1, bottomColor);
+            grad.addColorStop(0, s.t);
+            grad.addColorStop(1, s.b);
             ctx.fillStyle = grad;
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
         function drawCelestial() {
             const c = Math.sin(dayTime);
+            const mach = mph / 767;
             
             if (c > 0) {
                 ctx.save();
                 ctx.globalAlpha = Math.min(1, c + 0.3);
-                const y = 35 - c * 15;
-                
-                const sunGlow = ctx.createRadialGradient(700, y, 5, 700, y, 30);
-                sunGlow.addColorStop(0, 'rgba(255,215,0,0.8)');
-                sunGlow.addColorStop(1, 'rgba(255,215,0,0)');
-                ctx.fillStyle = sunGlow;
-                ctx.fillRect(670, y - 30, 60, 60);
+                const y = 40 - c * 20;
                 
                 ctx.fillStyle = '#FFD700';
                 ctx.beginPath();
-                ctx.arc(700, y, 20, 0, Math.PI * 2);
+                ctx.arc(700, y, 18, 0, Math.PI * 2);
                 ctx.fill();
                 
                 for (let i = 0; i < 12; i++) {
@@ -619,4 +452,232 @@
             
             if (c < 0.2) {
                 ctx.save();
-                ctx.globalAlpha = Math.max
+                ctx.globalAlpha = Math.max(0, 0.5 - c);
+                const y = 40 + c * 20;
+                
+                ctx.fillStyle = '#F0F0F0';
+                ctx.beginPath();
+                ctx.arc(700, y, 16, 0, Math.PI * 2);
+                ctx.fill();
+                
+                const stars = [
+                    {x:50,y:20},{x:120,y:35},{x:200,y:15},{x:280,y:45},
+                    {x:350,y:25},{x:420,y:40},{x:500,y:18},{x:580,y:50},
+                    {x:100,y:60},{x:400,y:10},{x:600,y:45},{x:150,y:30}
+                ];
+                
+                if (mach >= 3) {
+                    ctx.strokeStyle = '#FFF';
+                    ctx.lineWidth = 2;
+                    stars.forEach(s => {
+                        const len = (mach - 3) * 25 + 40;
+                        ctx.beginPath();
+                        ctx.moveTo(s.x, s.y);
+                        ctx.lineTo(s.x - len, s.y);
+                        ctx.stroke();
+                    });
+                } else {
+                    ctx.fillStyle = '#FFF';
+                    stars.forEach(s => {
+                        ctx.beginPath();
+                        ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+                }
+                ctx.restore();
+            }
+        }
+
+        function drawMountains() {
+            mountains -= speed * 0.15;
+            if (mountains < -1000) mountains = 0;
+            
+            for (let layer = 0; layer < 3; layer++) {
+                for (let i = -1; i < 5; i++) {
+                    const x = i * 320 + mountains + layer * 100;
+                    ctx.globalAlpha = layer === 0 ? 0.15 : (layer === 1 ? 0.3 : 0.5);
+                    ctx.fillStyle = isDark() ? '#2C3E50' : '#8B7355';
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x - 50, GROUND + 47);
+                    ctx.lineTo(x + 80, 25);
+                    ctx.lineTo(x + 210, GROUND + 47);
+                    ctx.fill();
+                    
+                    ctx.fillStyle = isDark() ? '#BDC3C7' : '#FFF';
+                    ctx.beginPath();
+                    ctx.moveTo(x + 80, 25);
+                    ctx.lineTo(x + 60, 45);
+                    ctx.lineTo(x + 100, 45);
+                    ctx.fill();
+                }
+            }
+            ctx.globalAlpha = 1;
+        }
+
+        function drawGround() {
+            let groundColor, lineColor;
+            
+            if (biome === 'desert') {
+                groundColor = isDark() ? '#8B7355' : '#D2B48C';
+                lineColor = isDark() ? '#6B5345' : '#BC9B6A';
+            } else if (biome === 'snow') {
+                groundColor = isDark() ? '#D0E0F0' : '#F0F8FF';
+                lineColor = isDark() ? '#B0C8E0' : '#D0E0F0';
+            } else {
+                groundColor = isDark() ? '#666' : '#8B7355';
+                lineColor = isDark() ? '#555' : '#654321';
+            }
+            
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(0, GROUND + 47);
+            ctx.lineTo(canvas.width, GROUND + 47);
+            ctx.stroke();
+            
+            ctx.fillStyle = groundColor;
+            for (let i = 0; i < canvas.width; i += 20) {
+                ctx.fillRect(i + (frame % 20), GROUND + 50, 2, 2);
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = isDark() ? '#FFF' : '#000';
+            ctx.font = 'bold 18px Courier';
+            ctx.textAlign = 'right';
+            ctx.fillText('HI ' + String(Math.floor(highScore)).padStart(5, '0'), canvas.width - 10, 30);
+            ctx.fillText(String(Math.floor(score)).padStart(5, '0'), canvas.width - 10, 55);
+        }
+
+        function drawSpeedometer() {
+            if (!canFly) return;
+            mph = Math.min(3500, (speed - 6) * 200 + 150);
+            const mach = (mph / 767).toFixed(2);
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.8)';
+            ctx.fillRect(10, 10, 160, 70);
+            ctx.strokeStyle = '#FF8C00';
+            ctx.lineWidth = 3;
+            ctx.strokeRect(10, 10, 160, 70);
+            
+            ctx.fillStyle = '#FF8C00';
+            ctx.font = 'bold 18px Courier';
+            ctx.textAlign = 'left';
+            ctx.fillText('SPEED', 20, 32);
+            
+            ctx.fillStyle = mach >= 3 ? '#F00' : '#0F0';
+            ctx.font = 'bold 22px Courier';
+            ctx.fillText(Math.floor(mph) + ' MPH', 20, 55);
+            
+            ctx.fillStyle = mach >= 3 ? '#F00' : '#FFF';
+            ctx.font = 'bold 16px Courier';
+            ctx.fillText('MACH ' + mach, 20, 73);
+        }
+
+        function loop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            dayTime += 0.002;
+            if (dayTime > Math.PI * 2) dayTime = 0;
+            
+            biomeTimer++;
+            if (biomeTimer > 1200) {
+                const biomes = ['forest', 'desert', 'snow'];
+                const currentIndex = biomes.indexOf(biome);
+                biome = biomes[(currentIndex + 1) % 3];
+                biomeTimer = 0;
+            }
+            
+            drawSky();
+            drawCelestial();
+            
+            clouds = clouds.filter(c => {
+                c.update();
+                c.draw();
+                return c.x > -c.w;
+            });
+            
+            drawMountains();
+            
+            trees = trees.filter(t => {
+                t.update();
+                t.draw();
+                return t.x > -20;
+            });
+            
+            drawGround();
+
+            if (!started) {
+                dino.draw();
+                ctx.fillStyle = isDark() ? '#FFF' : '#000';
+                ctx.font = '18px Courier';
+                ctx.textAlign = 'center';
+                ctx.fillText('Press SPACE or Click to Start', canvas.width/2, canvas.height/2);
+                requestAnimationFrame(loop);
+                return;
+            }
+
+            if (gameOver) {
+                dino.draw();
+                obstacles.forEach(o => o.draw());
+                drawScore();
+                ctx.fillStyle = isDark() ? '#FFF' : '#000';
+                ctx.font = 'bold 28px Courier';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
+                ctx.font = '18px Courier';
+                ctx.fillText('Press R to restart', canvas.width/2, canvas.height/2 + 15);
+                return;
+            }
+
+            if (speed < 14) speed += 0.002;
+            
+            score += canFly ? 250/60 : 100/120;
+
+            const s = Math.floor(score);
+            if (s > 0 && s % 100 === 0 && Math.floor(score - (canFly ? 250/60 : 100/120)) !== s) {
+                if (s % 10000 === 0) {
+                    if (audioLoaded) {
+                        noiceAudio.currentTime = 0;
+                        noiceAudio.play().catch(() => beep(1200));
+                    } else {
+                        beep(1200);
+                    }
+                } else if (s % 1000 === 0) {
+                    if (audioLoaded) {
+                        applauseAudio.currentTime = 0;
+                        applauseAudio.play().catch(() => beep(1100));
+                    } else {
+                        beep(1100);
+                    }
+                } else {
+                    beep(1000);
+                }
+            }
+
+            if (dino.y >= GROUND - 5 && !canFly && frame % 2 === 0) {
+                particles.push(new Particle(dino.x + 15, dino.y + dino.h - 5));
+            }
+            
+            particles = particles.filter(p => {
+                p.update();
+                p.draw();
+                return p.life > 0;
+            });
+
+            if (Math.random() > 0.92) {
+                trees.push(new Tree(canvas.width, Math.random() > 0.5 ? 0 : 1));
+            }
+            
+            if (Math.random() > 0.98) {
+                clouds.push(new Cloud(canvas.width, 30 + Math.random() * 50));
+            }
+
+            dino.update();
+            dino.draw();
+
+            nextSpawn--;
+            if (nextSpawn <= 0) {
+                if (Math.random() > 0.4) {
+                    obstacles.push(new Cactus());
