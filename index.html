@@ -26,7 +26,7 @@
         const ctx = c.getContext('2d');
         
         let speed = 6, score = 0, high = 0, over = false, start = false;
-        let obs = [], frame = 0, next = 400;
+        let obs = [], frame = 0, next = 300;  // more consistent cactus spawn interval
         let fly = false, god = false, space = 0, last = 0;
         let keys = {u:false, d:false};
 
@@ -84,8 +84,8 @@
 
         // Define biomes and background visuals (clouds, sky, etc.)
         const clouds = [];
-        for (let i = 0; i < 5; i++) {
-            clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 60 + 20});
+        for (let i = 0; i < 8; i++) {  // increase cloud count
+            clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 60 + 30});
         }
 
         function drawClouds() {
@@ -233,8 +233,8 @@
             
             next--;
             if (next <= 0) {
-                obs.push(Math.random() > 0.6 ? new Cactus() : new Ptero());
-                next = 300 + Math.random() * 400;
+                obs.push(Math.random() > 0.5 ? new Cactus() : new Ptero());  // Consistent cactus spawn
+                next = 300;  // Consistent interval
             }
             
             obs = obs.filter(o => {
@@ -281,7 +281,7 @@
             if (e.code === 'KeyR') {
                 if (over) {
                     score = 0; speed = 6; over = false; start = false;
-                    obs = []; frame = 0; next = 400;
+                    obs = []; frame = 0; next = 300;
                     dino.y = 150; dino.dy = 0; dino.jump = false;
                     fly = false; god = false; space = 0;
                     keys = {u:false, d:false};
