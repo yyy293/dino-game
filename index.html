@@ -5,679 +5,249 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dino Game</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0; padding: 0; }
         body { 
             display: flex;
             justify-content: center; 
             align-items: center; 
             min-height: 100vh; 
-            background: #1a1a2e;
-            font-family: 'Courier New', monospace;
+            background: #222;
         }
         canvas { 
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 2px solid #fff;
         }
     </style>
 </head>
 <body>
-    <canvas id="game"></canvas>
+    <canvas id="game" width="800" height="200"></canvas>
     <script>
-        const canvas = document.getElementById('game');
-        const ctx = canvas.getContext('2d');
-        canvas.width = 800;
-        canvas.height = 200;
-
-        const GROUND = 150;
-        let speed = 6;
-        let score = 0;
-        let highScore = localStorage.getItem('highScore') || 0;
-        let gameOver = false;
-        let started = false;
-        let obstacles = [];
-        let frame = 0;
-        let nextSpawn = 400;
-        let particles = [];
-        let trees = [];
-        let clouds = [];
-        let mountains = 0;
-        let dayTime = 0;
-        let biome = 'forest';
-        let biomeTimer = 0;
+        const c = document.getElementById('game');
+        const ctx = c.getContext('2d');
         
-        let canFly = false;
-        let invincible = false;
-        let spacePress = 0;
-        let lastSpace = 0;
-        let flightSpeed = 12;
-        let mph = 0;
+        let speed = 6, score = 0, high = 0, over = false, start = false;
+        let obs = [], frame = 0, next = 400;
+        let fly = false, god = false, space = 0, last = 0;
+        let keys = {u:false, d:false};
         
-        let keys = { up: false, down: false };
-
-        // Audio with error handling
-        let audioLoaded = false;
-        const noiceAudio = new Audio();
-        const applauseAudio = new Audio();
-        const deathAudio = new Audio();
-        
-        try {
-            noiceAudio.src = 'audiotrimmer_adesehy.mp3';
-            applauseAudio.src = 'aplausos_2.mp3';
-            deathAudio.src = 'directed-by-robert-b_voI2Z4T.mp3';
-            noiceAudio.volume = 0.5;
-            applauseAudio.volume = 0.5;
-            deathAudio.volume = 0.5;
-            audioLoaded = true;
-        } catch(e) {
-            console.log('Audio files not found, using fallback sounds');
-        }
-        
-        const audio = new (window.AudioContext || window.webkitAudioContext)();
-
-        function beep(freq) {
-            try {
-                const now = audio.currentTime;
-                const osc = audio.createOscillator();
-                const gain = audio.createGain();
-                osc.frequency.value = freq;
-                gain.gain.setValueAtTime(0.1, now);
-                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-                osc.connect(gain);
-                gain.connect(audio.destination);
-                osc.start(now);
-                osc.stop(now + 0.2);
-            } catch(e) {}
-        }
-
         const dino = {
-            x: 50, y: GROUND, w: 44, h: 47,
-            dy: 0, jump: false, leg: 0, targetY: GROUND,
+            x: 50, y: 150, w: 44, h: 47, dy: 0, jump: false, leg: 0, ty: 150,
             
             update() {
-                if (canFly) {
-                    if (keys.up) this.targetY = Math.max(20, this.targetY - flightSpeed);
-                    if (keys.down) this.targetY = Math.min(GROUND, this.targetY + flightSpeed);
-                    this.y += (this.targetY - this.y) * 0.4;
-                    this.dy = 0;
+                if (fly) {
+                    if (keys.u) this.ty = Math.max(20, this.ty - 12);
+                    if (keys.d) this.ty = Math.min(150, this.ty + 12);
+                    this.y += (this.ty - this.y) * 0.4;
                 } else {
                     this.dy += 0.6;
                     this.y += this.dy;
-                    if (this.y >= GROUND) {
-                        this.y = GROUND;
+                    if (this.y >= 150) {
+                        this.y = 150;
                         this.dy = 0;
                         this.jump = false;
                     }
                 }
-                
-                if (this.y >= GROUND && started && !gameOver && frame % 5 === 0) {
-                    this.leg = 1 - this.leg;
-                }
+                if (this.y >= 150 && frame % 5 === 0) this.leg = 1 - this.leg;
             },
             
             draw() {
-                if (invincible && Math.floor(frame / 8) % 2) {
-                    ctx.globalAlpha = 0.5;
-                }
-                
-                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
-                
-                // Body
+                ctx.fillStyle = fly ? '#0BF' : '#535';
                 ctx.fillRect(this.x + 20, this.y, 22, 22);
-                // Neck
                 ctx.fillRect(this.x + 35, this.y + 10, 7, 12);
-                // Head
                 ctx.fillRect(this.x + 35, this.y + 2, 15, 10);
-                ctx.fillRect(this.x + 48, this.y + 8, 4, 4);
-                // Eye
                 ctx.fillStyle = '#fff';
                 ctx.fillRect(this.x + 45, this.y + 4, 3, 3);
-                ctx.fillStyle = '#000';
-                ctx.fillRect(this.x + 46, this.y + 5, 1, 1);
-                
-                ctx.fillStyle = canFly ? '#00BFFF' : '#535353';
-                // Tail
+                ctx.fillStyle = fly ? '#0BF' : '#535';
                 ctx.fillRect(this.x + 10, this.y + 18, 12, 4);
                 ctx.fillRect(this.x, this.y + 16, 12, 4);
-                ctx.fillRect(this.x, this.y + 14, 4, 4);
-                
-                // Arms
-                ctx.fillRect(this.x + 38, this.y + 18, 4, 6);
-                
-                // Legs
                 if (this.leg === 0) {
                     ctx.fillRect(this.x + 20, this.y + 22, 6, 10);
                     ctx.fillRect(this.x + 30, this.y + 22, 6, 10);
-                    ctx.fillRect(this.x + 20, this.y + 32, 8, 3);
-                    ctx.fillRect(this.x + 30, this.y + 32, 8, 3);
                 } else {
                     ctx.fillRect(this.x + 22, this.y + 22, 6, 10);
                     ctx.fillRect(this.x + 28, this.y + 22, 6, 10);
-                    ctx.fillRect(this.x + 22, this.y + 32, 8, 3);
-                    ctx.fillRect(this.x + 28, this.y + 32, 8, 3);
                 }
                 
-                ctx.globalAlpha = 1;
-                
-                if (canFly) {
-                    ctx.fillStyle = '#FF8C00';
-                    ctx.font = 'bold 16px Courier';
-                    ctx.textAlign = 'left';
-                    ctx.fillText('FLIGHT ENABLED!', this.x - 20, this.y - 10);
-                }
-            },
-            
-            doJump() {
-                if (!canFly && !this.jump && this.y >= GROUND && !gameOver && started) {
-                    this.dy = -11;
-                    this.jump = true;
-                    beep(600);
+                if (fly) {
+                    ctx.fillStyle = '#F80';
+                    ctx.font = '16px Courier';
+                    ctx.fillText('FLIGHT!', this.x - 10, this.y - 10);
                 }
             }
         };
-
+        
         class Cactus {
             constructor() {
-                this.x = canvas.width;
+                this.x = 800;
+                this.y = 152;
                 this.w = 30;
                 this.h = 45;
-                this.y = GROUND + 47 - this.h;
             }
-            
-            update() {
-                this.x -= speed;
-            }
-            
             draw() {
-                ctx.fillStyle = '#27ae60';
+                ctx.fillStyle = '#2a6';
                 ctx.fillRect(this.x + 12, this.y, 10, this.h);
                 ctx.fillRect(this.x + 4, this.y + 10, 8, 20);
-                ctx.fillRect(this.x + 4, this.y + 10, 4, 25);
                 ctx.fillRect(this.x + 22, this.y + 15, 8, 18);
-                ctx.fillRect(this.x + 26, this.y + 15, 4, 22);
-                ctx.fillStyle = '#229954';
-                for (let i = 0; i < this.h; i += 8) {
-                    ctx.fillRect(this.x + 10, this.y + i, 2, 4);
-                    ctx.fillRect(this.x + 22, this.y + i + 4, 2, 4);
-                }
             }
-            
             hits(d) {
-                return d.x < this.x + this.w - 5 &&
-                       d.x + d.w - 5 > this.x &&
-                       d.y < this.y + this.h - 5 &&
-                       d.y + d.h - 5 > this.y;
+                return d.x < this.x + this.w - 5 && d.x + d.w - 5 > this.x &&
+                       d.y < this.y + this.h - 5 && d.y + d.h - 5 > this.y;
             }
         }
-
+        
         class Ptero {
             constructor() {
-                this.x = canvas.width;
-                this.w = 46;
-                this.h = 40;
-                this.y = GROUND - 35 - Math.random() * 35;
+                this.x = 800;
+                this.y = 80 + Math.random() * 40;
+                this.w = 40;
+                this.h = 30;
             }
-            
-            update() {
-                this.x -= speed;
-            }
-            
             draw() {
-                const wingUp = Math.floor(frame / 8) % 2 === 0;
-                
-                ctx.fillStyle = '#8B4513';
+                const up = Math.floor(frame / 8) % 2 === 0;
+                ctx.fillStyle = '#841';
                 ctx.fillRect(this.x + 10, this.y + 8, 20, 8);
                 ctx.fillRect(this.x + 28, this.y + 6, 8, 8);
-                ctx.fillStyle = '#DAA520';
-                ctx.fillRect(this.x + 36, this.y + 8, 6, 4);
-                ctx.fillStyle = '#000';
-                ctx.fillRect(this.x + 31, this.y + 8, 2, 2);
-                
-                ctx.fillStyle = '#A0522D';
-                if (wingUp) {
+                if (up) {
                     ctx.fillRect(this.x + 8, this.y - 6, 10, 14);
                     ctx.fillRect(this.x + 22, this.y - 6, 10, 14);
                 } else {
                     ctx.fillRect(this.x + 8, this.y + 16, 10, 14);
                     ctx.fillRect(this.x + 22, this.y + 16, 10, 14);
                 }
-                
-                ctx.fillStyle = '#8B4513';
-                ctx.fillRect(this.x + 4, this.y + 10, 8, 4);
-                ctx.fillRect(this.x, this.y + 10, 4, 2);
             }
-            
             hits(d) {
-                return d.x < this.x + this.w - 10 &&
-                       d.x + d.w - 10 > this.x &&
-                       d.y < this.y + this.h - 10 &&
-                       d.y + d.h - 10 > this.y;
+                return d.x < this.x + this.w - 10 && d.x + d.w - 10 > this.x &&
+                       d.y < this.y + this.h - 10 && d.y + d.h - 10 > this.y;
             }
         }
-
-        class Particle {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.vx = -speed * 0.8;
-                this.vy = (Math.random() - 0.5) * 3;
-                this.life = 25;
-            }
+        
+        function loop() {
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, 800, 200);
             
-            update() {
-                this.x += this.vx;
-                this.y += this.vy;
-                this.life--;
-            }
-            
-            draw() {
-                ctx.fillStyle = `rgba(139,115,85,${this.life/25})`;
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        class Tree {
-            constructor(x, layer) {
-                this.x = x;
-                this.layer = layer;
-                this.h = 35 + Math.random() * 25;
-                this.w = 12 + Math.random() * 8;
-                this.type = Math.floor(Math.random() * 3);
-                this.biomeType = biome;
-            }
-            
-            update() {
-                this.x -= speed * (this.layer === 0 ? 0.3 : 0.5);
-            }
-            
-            draw() {
-                const alpha = this.layer === 0 ? 0.3 : 0.5;
-                ctx.globalAlpha = alpha;
-                
-                const baseY = GROUND + 47;
-                const trunkW = this.w * 0.3;
-                const trunkX = this.x + this.w / 2 - trunkW / 2;
-                
-                if (this.biomeType === 'desert') {
-                    ctx.fillStyle = '#3d9b4e';
-                    ctx.fillRect(trunkX - 2, baseY - this.h, trunkW + 4, this.h);
-                    ctx.fillRect(trunkX - 8, baseY - this.h * 0.7, 6, this.h * 0.4);
-                    ctx.fillRect(trunkX + trunkW + 2, baseY - this.h * 0.6, 6, this.h * 0.5);
-                } else if (this.biomeType === 'snow') {
-                    ctx.fillStyle = '#4a3f35';
-                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                    
-                    ctx.fillStyle = '#2d6b2d';
-                    for (let i = 0; i < 4; i++) {
-                        const y = baseY - this.h - 5 + i * 8;
-                        const w = this.w * (1.2 - i * 0.2);
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + this.w / 2, y - 10);
-                        ctx.lineTo(this.x + this.w / 2 - w / 2, y);
-                        ctx.lineTo(this.x + this.w / 2 + w / 2, y);
-                        ctx.fill();
-                        
-                        ctx.fillStyle = '#FFFFFF';
-                        ctx.beginPath();
-                        ctx.moveTo(this.x + this.w / 2, y - 10);
-                        ctx.lineTo(this.x + this.w / 2 - w / 4, y - 6);
-                        ctx.lineTo(this.x + this.w / 2 + w / 4, y - 6);
-                        ctx.fill();
-                        ctx.fillStyle = '#2d6b2d';
-                    }
-                } else {
-                    ctx.fillStyle = '#6B4423';
-                    ctx.fillRect(trunkX, baseY - this.h, trunkW, this.h);
-                    
-                    ctx.fillStyle = '#2d6b2d';
-                    if (this.type === 0) {
-                        for (let i = 0; i < 4; i++) {
-                            const y = baseY - this.h - 5 + i * 8;
-                            const w = this.w * (1.2 - i * 0.2);
-                            ctx.beginPath();
-                            ctx.moveTo(this.x + this.w / 2, y - 10);
-                            ctx.lineTo(this.x + this.w / 2 - w / 2, y);
-                            ctx.lineTo(this.x + this.w / 2 + w / 2, y);
-                            ctx.fill();
-                        }
-                    } else {
-                        ctx.beginPath();
-                        ctx.arc(this.x + this.w / 2, baseY - this.h - 8, this.w * 0.6, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                }
-                
-                ctx.globalAlpha = 1;
-            }
-        }
-
-        class Cloud {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.w = 50;
-            }
-            
-            update() {
-                this.x -= speed * 0.2;
-            }
-            
-            draw() {
-                ctx.fillStyle = 'rgba(255,255,255,0.6)';
-                ctx.beginPath();
-                ctx.arc(this.x, this.y, 15, 0, Math.PI * 2);
-                ctx.arc(this.x + 20, this.y, 18, 0, Math.PI * 2);
-                ctx.arc(this.x + 40, this.y, 15, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        function isDark() {
-            return Math.sin(dayTime) < 0;
-        }
-
-        function sky() {
-            const c = Math.sin(dayTime);
-            let base;
-            
-            if (biome === 'desert') {
-                if (c > 0.5) base = { t: '#FFB84D', b: '#FFA500' };
-                else if (c < -0.5) base = { t: '#1a1a3e', b: '#2d2d5c' };
-                else {
-                    const t = (c + 0.5);
-                    base = {
-                        t: `rgb(${Math.floor(255*t+26*(1-t))},${Math.floor(184*t+26*(1-t))},${Math.floor(77*t+62*(1-t))})`,
-                        b: `rgb(${Math.floor(255*t+45*(1-t))},${Math.floor(165*t+45*(1-t))},0)`
-                    };
-                }
-            } else if (biome === 'snow') {
-                if (c > 0.5) base = { t: '#B8C6DB', b: '#E8EEF5' };
-                else if (c < -0.5) base = { t: '#0a0a28', b: '#14143c' };
-                else {
-                    const t = (c + 0.5);
-                    base = {
-                        t: `rgb(${Math.floor(184*t+10*(1-t))},${Math.floor(198*t+10*(1-t))},${Math.floor(219*t+40*(1-t))})`,
-                        b: `rgb(${Math.floor(232*t+20*(1-t))},${Math.floor(238*t+20*(1-t))},${Math.floor(245*t+60*(1-t))})`
-                    };
-                }
-            } else {
-                if (c > 0.5) base = { t: '#87CEEB', b: '#E0F6FF' };
-                else if (c < -0.5) base = { t: '#0a0a28', b: '#14143c' };
-                else {
-                    const t = (c + 0.5);
-                    base = {
-                        t: `rgb(${Math.floor(135*t+10*(1-t))},${Math.floor(206*t+10*(1-t))},${Math.floor(235*t+40*(1-t))})`,
-                        b: `rgb(${Math.floor(224*t+20*(1-t))},${Math.floor(246*t+20*(1-t))},${Math.floor(255*t+60*(1-t))})`
-                    };
-                }
-            }
-            
-            return base;
-        }
-
-        function drawSky() {
-            const s = sky();
-            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-            grad.addColorStop(0, s.t);
-            grad.addColorStop(1, s.b);
-            ctx.fillStyle = grad;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        }
-
-        function drawCelestial() {
-            const c = Math.sin(dayTime);
-            const mach = mph / 767;
-            
-            if (c > 0) {
-                ctx.save();
-                ctx.globalAlpha = Math.min(1, c + 0.3);
-                const y = 40 - c * 20;
-                
-                ctx.fillStyle = '#FFD700';
-                ctx.beginPath();
-                ctx.arc(700, y, 18, 0, Math.PI * 2);
-                ctx.fill();
-                
-                for (let i = 0; i < 12; i++) {
-                    const a = (i * Math.PI / 6) + frame * 0.02;
-                    ctx.strokeStyle = '#FFD700';
-                    ctx.lineWidth = 2;
-                    ctx.beginPath();
-                    ctx.moveTo(700 + Math.cos(a) * 25, y + Math.sin(a) * 25);
-                    ctx.lineTo(700 + Math.cos(a) * 35, y + Math.sin(a) * 35);
-                    ctx.stroke();
-                }
-                ctx.restore();
-            }
-            
-            if (c < 0.2) {
-                ctx.save();
-                ctx.globalAlpha = Math.max(0, 0.5 - c);
-                const y = 40 + c * 20;
-                
-                ctx.fillStyle = '#F0F0F0';
-                ctx.beginPath();
-                ctx.arc(700, y, 16, 0, Math.PI * 2);
-                ctx.fill();
-                
-                const stars = [
-                    {x:50,y:20},{x:120,y:35},{x:200,y:15},{x:280,y:45},
-                    {x:350,y:25},{x:420,y:40},{x:500,y:18},{x:580,y:50},
-                    {x:100,y:60},{x:400,y:10},{x:600,y:45},{x:150,y:30}
-                ];
-                
-                if (mach >= 3) {
-                    ctx.strokeStyle = '#FFF';
-                    ctx.lineWidth = 2;
-                    stars.forEach(s => {
-                        const len = (mach - 3) * 25 + 40;
-                        ctx.beginPath();
-                        ctx.moveTo(s.x, s.y);
-                        ctx.lineTo(s.x - len, s.y);
-                        ctx.stroke();
-                    });
-                } else {
-                    ctx.fillStyle = '#FFF';
-                    stars.forEach(s => {
-                        ctx.beginPath();
-                        ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
-                        ctx.fill();
-                    });
-                }
-                ctx.restore();
-            }
-        }
-
-        function drawMountains() {
-            mountains -= speed * 0.15;
-            if (mountains < -1000) mountains = 0;
-            
-            for (let layer = 0; layer < 3; layer++) {
-                for (let i = -1; i < 5; i++) {
-                    const x = i * 320 + mountains + layer * 100;
-                    ctx.globalAlpha = layer === 0 ? 0.15 : (layer === 1 ? 0.3 : 0.5);
-                    ctx.fillStyle = isDark() ? '#2C3E50' : '#8B7355';
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(x - 50, GROUND + 47);
-                    ctx.lineTo(x + 80, 25);
-                    ctx.lineTo(x + 210, GROUND + 47);
-                    ctx.fill();
-                    
-                    ctx.fillStyle = isDark() ? '#BDC3C7' : '#FFF';
-                    ctx.beginPath();
-                    ctx.moveTo(x + 80, 25);
-                    ctx.lineTo(x + 60, 45);
-                    ctx.lineTo(x + 100, 45);
-                    ctx.fill();
-                }
-            }
-            ctx.globalAlpha = 1;
-        }
-
-        function drawGround() {
-            let groundColor, lineColor;
-            
-            if (biome === 'desert') {
-                groundColor = isDark() ? '#8B7355' : '#D2B48C';
-                lineColor = isDark() ? '#6B5345' : '#BC9B6A';
-            } else if (biome === 'snow') {
-                groundColor = isDark() ? '#D0E0F0' : '#F0F8FF';
-                lineColor = isDark() ? '#B0C8E0' : '#D0E0F0';
-            } else {
-                groundColor = isDark() ? '#666' : '#8B7355';
-                lineColor = isDark() ? '#555' : '#654321';
-            }
-            
-            ctx.strokeStyle = lineColor;
+            // Ground
+            ctx.strokeStyle = '#654';
             ctx.lineWidth = 3;
             ctx.beginPath();
-            ctx.moveTo(0, GROUND + 47);
-            ctx.lineTo(canvas.width, GROUND + 47);
+            ctx.moveTo(0, 197);
+            ctx.lineTo(800, 197);
             ctx.stroke();
             
-            ctx.fillStyle = groundColor;
-            for (let i = 0; i < canvas.width; i += 20) {
-                ctx.fillRect(i + (frame % 20), GROUND + 50, 2, 2);
-            }
-        }
-
-        function drawScore() {
-            ctx.fillStyle = isDark() ? '#FFF' : '#000';
-            ctx.font = 'bold 18px Courier';
-            ctx.textAlign = 'right';
-            ctx.fillText('HI ' + String(Math.floor(highScore)).padStart(5, '0'), canvas.width - 10, 30);
-            ctx.fillText(String(Math.floor(score)).padStart(5, '0'), canvas.width - 10, 55);
-        }
-
-        function drawSpeedometer() {
-            if (!canFly) return;
-            mph = Math.min(3500, (speed - 6) * 200 + 150);
-            const mach = (mph / 767).toFixed(2);
-            
-            ctx.fillStyle = 'rgba(0,0,0,0.8)';
-            ctx.fillRect(10, 10, 160, 70);
-            ctx.strokeStyle = '#FF8C00';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(10, 10, 160, 70);
-            
-            ctx.fillStyle = '#FF8C00';
-            ctx.font = 'bold 18px Courier';
-            ctx.textAlign = 'left';
-            ctx.fillText('SPEED', 20, 32);
-            
-            ctx.fillStyle = mach >= 3 ? '#F00' : '#0F0';
-            ctx.font = 'bold 22px Courier';
-            ctx.fillText(Math.floor(mph) + ' MPH', 20, 55);
-            
-            ctx.fillStyle = mach >= 3 ? '#F00' : '#FFF';
-            ctx.font = 'bold 16px Courier';
-            ctx.fillText('MACH ' + mach, 20, 73);
-        }
-
-        function loop() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            dayTime += 0.002;
-            if (dayTime > Math.PI * 2) dayTime = 0;
-            
-            biomeTimer++;
-            if (biomeTimer > 1200) {
-                const biomes = ['forest', 'desert', 'snow'];
-                const currentIndex = biomes.indexOf(biome);
-                biome = biomes[(currentIndex + 1) % 3];
-                biomeTimer = 0;
-            }
-            
-            drawSky();
-            drawCelestial();
-            
-            clouds = clouds.filter(c => {
-                c.update();
-                c.draw();
-                return c.x > -c.w;
-            });
-            
-            drawMountains();
-            
-            trees = trees.filter(t => {
-                t.update();
-                t.draw();
-                return t.x > -20;
-            });
-            
-            drawGround();
-
-            if (!started) {
+            if (!start) {
                 dino.draw();
-                ctx.fillStyle = isDark() ? '#FFF' : '#000';
+                ctx.fillStyle = '#000';
                 ctx.font = '18px Courier';
                 ctx.textAlign = 'center';
-                ctx.fillText('Press SPACE or Click to Start', canvas.width/2, canvas.height/2);
+                ctx.fillText('Press SPACE to Start', 400, 100);
                 requestAnimationFrame(loop);
                 return;
             }
-
-            if (gameOver) {
+            
+            if (over) {
                 dino.draw();
-                obstacles.forEach(o => o.draw());
-                drawScore();
-                ctx.fillStyle = isDark() ? '#FFF' : '#000';
+                obs.forEach(o => o.draw());
+                ctx.fillStyle = '#000';
                 ctx.font = 'bold 28px Courier';
                 ctx.textAlign = 'center';
-                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 20);
+                ctx.fillText('GAME OVER', 400, 80);
                 ctx.font = '18px Courier';
-                ctx.fillText('Press R to restart', canvas.width/2, canvas.height/2 + 15);
+                ctx.fillText('Press R to restart', 400, 110);
+                ctx.textAlign = 'right';
+                ctx.fillText('Score: ' + Math.floor(score), 790, 30);
+                ctx.fillText('High: ' + Math.floor(high), 790, 55);
                 return;
             }
-
-            if (speed < 14) speed += 0.002;
             
-            score += canFly ? 250/60 : 100/120;
-
-            const s = Math.floor(score);
-            if (s > 0 && s % 100 === 0 && Math.floor(score - (canFly ? 250/60 : 100/120)) !== s) {
-                if (s % 10000 === 0) {
-                    if (audioLoaded) {
-                        noiceAudio.currentTime = 0;
-                        noiceAudio.play().catch(() => beep(1200));
-                    } else {
-                        beep(1200);
-                    }
-                } else if (s % 1000 === 0) {
-                    if (audioLoaded) {
-                        applauseAudio.currentTime = 0;
-                        applauseAudio.play().catch(() => beep(1100));
-                    } else {
-                        beep(1100);
-                    }
-                } else {
-                    beep(1000);
-                }
-            }
-
-            if (dino.y >= GROUND - 5 && !canFly && frame % 2 === 0) {
-                particles.push(new Particle(dino.x + 15, dino.y + dino.h - 5));
-            }
+            speed = Math.min(14, speed + 0.002);
+            score += fly ? 250/60 : 100/120;
             
-            particles = particles.filter(p => {
-                p.update();
-                p.draw();
-                return p.life > 0;
-            });
-
-            if (Math.random() > 0.92) {
-                trees.push(new Tree(canvas.width, Math.random() > 0.5 ? 0 : 1));
-            }
-            
-            if (Math.random() > 0.98) {
-                clouds.push(new Cloud(canvas.width, 30 + Math.random() * 50));
-            }
-
             dino.update();
             dino.draw();
-
-            nextSpawn--;
-            if (nextSpawn <= 0) {
-                if (Math.random() > 0.4) {
-                    obstacles.push(new Cactus());
+            
+            next--;
+            if (next <= 0) {
+                obs.push(Math.random() > 0.6 ? new Cactus() : new Ptero());
+                next = 300 + Math.random() * 400;
+            }
+            
+            obs = obs.filter(o => {
+                o.x -= speed;
+                o.draw();
+                if (!god && o.hits(dino)) {
+                    over = true;
+                    if (score > high) high = score;
+                }
+                return o.x > -50;
+            });
+            
+            ctx.fillStyle = '#000';
+            ctx.font = 'bold 18px Courier';
+            ctx.textAlign = 'right';
+            ctx.fillText('HI ' + String(Math.floor(high)).padStart(5, '0'), 790, 30);
+            ctx.fillText(String(Math.floor(score)).padStart(5, '0'), 790, 55);
+            
+            frame++;
+            requestAnimationFrame(loop);
+        }
+        
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (!start) { start = true; return; }
+                if (over) return;
+                
+                const now = Date.now();
+                if (now - last < 1000) space++;
+                else space = 1;
+                last = now;
+                
+                if (space >= 2 && !fly) {
+                    fly = true;
+                    space = 0;
+                } else if (!fly && !dino.jump && dino.y >= 150) {
+                    dino.dy = -11;
+                    dino.jump = true;
+                }
+            }
+            if (e.code === 'ArrowUp' && fly) { e.preventDefault(); keys.u = true; }
+            if (e.code === 'ArrowDown' && fly) { e.preventDefault(); keys.d = true; }
+            if (e.code === 'KeyR') {
+                if (over) {
+                    score = 0; speed = 6; over = false; start = false;
+                    obs = []; frame = 0; next = 400;
+                    dino.y = 150; dino.dy = 0; dino.jump = false;
+                    fly = false; god = false; space = 0;
+                    keys = {u:false, d:false};
+                    loop();
+                } else if (start) {
+                    god = !god;
+                }
+            }
+        });
+        
+        document.addEventListener('keyup', e => {
+            if (e.code === 'ArrowUp') keys.u = false;
+            if (e.code === 'ArrowDown') keys.d = false;
+        });
+        
+        c.addEventListener('click', () => {
+            if (!start) { start = true; return; }
+            if (over) return;
+            
+            const now = Date.now();
+            if (now - last < 1000) space++;
+            else space = 1;
+            last = now;
+            
+            if (space >= 2 && !fly) {
+                fly = true;
+                space = 0;
+            } else if (!fly && !dino.jump && dino.y >= 150) {
+                dino.dy = -11;
+                dino.jump = true;
+            }
+        });
+        
+        loop();
+    </script>
+</body>
+</html>
