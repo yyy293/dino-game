@@ -64,9 +64,8 @@
         });
 
         function startGame() {
-            // Game logic starts here after audio is enabled or disabled
             let speed = 6, score = 0, high = 0, over = false, start = false;
-            let obs = [], frame = 0, next = 100, biomeChange = 500;  // Cactus spawn interval and biome change interval
+            let obs = [], frame = 0, next = 100, biomeChange = 500;
             let fly = false, god = false, space = 0, last = 0;
             let keys = {u:false, d:false};
             
@@ -118,8 +117,8 @@
 
             // Define biomes and background visuals (clouds, sky, etc.)
             const clouds = [];
-            for (let i = 0; i < 8; i++) {  // increase cloud count
-                clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 60 + 30});
+            for (let i = 0; i < 5; i++) {  // Decreased cloud count
+                clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 40 + 20});
             }
 
             const shootingStars = [];
@@ -170,7 +169,7 @@
                 }
 
                 if (isNight) {
-                    ctx.fillStyle = '#002f49'; // Night sky
+                    ctx.fillStyle = '#001d2d'; // Dark night sky
                     ctx.fillRect(0, 0, 800, 200);
                     // Draw stars
                     for (let i = 0; i < 50; i++) {
@@ -224,11 +223,48 @@
                 }
             }
 
-            // Add your game loop and other logic here, including triggering sounds based on score as in the previous version
+            // Add your game loop and other logic here, including triggering sounds based on score
 
+            function gameLoop() {
+                ctx.clearRect(0, 0, 800, 200); 
+                setBiomeAndBackground();
+
+                // Dino movement and drawing logic
+                dino.update();
+                dino.draw();
+
+                // Cactus and other obstacles handling
+                next--;
+                if (next <= 0) {
+                    const cactusSpacing = [20, 30, 57, 64];
+                    const spacing = cactusSpacing[Math.floor(Math.random() * cactusSpacing.length)];
+                    obs.push(new Cactus());
+                    next = spacing;
+                }
+
+                // Collision detection and game logic
+                obs = obs.filter(o => {
+                    o.x -= speed;
+                    o.draw();
+                    if (o.hits(dino)) {
+                        over = true;
+                        if (audioEnabled) gameOverAudio.play();
+                    }
+                    return o.x > -50;
+                });
+
+                // Audio triggers
+                if (audioEnabled) {
+                    if (score >= 1000 && score < 2000) applause.play();
+                    else if (score >= 10000 && score < 20000) celebration.play();
+                }
+
+                requestAnimationFrame(gameLoop);
+            }
+
+            gameLoop();
         }
 
-        // Display audio prompt at the start
         promptAudio();
     </script>
 </body>
