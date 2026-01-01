@@ -26,20 +26,16 @@
         const ctx = c.getContext('2d');
         
         let speed = 6, score = 0, high = 0, over = false, start = false;
-        let obs = [], frame = 0, next = 100, biomeChange = 500;  // Cactus spawn interval and biome change interval
+        let obs = [], frame = 0, next = 100, biomeChange = 500;
         let fly = false, god = false, space = 0, last = 0;
         let keys = {u:false, d:false};
 
-        // Audio files
-        const audioDing = new Audio('https://www.soundjay.com/button/beep-07.wav'); // Ding sound
-        const applause = new Audio('https://www.soundjay.com/button/beep-04.wav'); // applause sound
-        const celebration = new Audio('https://www.soundjay.com/button/beep-08.wav'); // celebration sound
-        const gameOverAudio = new Audio('https://www.soundjay.com/button/beep-09.wav'); // game over sound
-
-        // Audio control variable
+        const audioDing = new Audio('https://www.soundjay.com/button/beep-07.wav');
+        const applause = new Audio('https://www.soundjay.com/button/beep-04.wav');
+        const celebration = new Audio('https://www.soundjay.com/button/beep-08.wav');
+        const gameOverAudio = new Audio('https://www.soundjay.com/button/beep-09.wav');
         let audioEnabled = false;
 
-        // Prompt the user for audio enablement
         function promptAudio() {
             ctx.fillStyle = '#fff';
             ctx.font = '20px Courier';
@@ -48,7 +44,6 @@
             ctx.fillText('Press Enter for no audio', 400, 130);
         }
 
-        // Event listener for enabling/disabling audio
         c.addEventListener('click', () => {
             audioEnabled = true;
             ctx.clearRect(0, 0, 800, 200);
@@ -64,11 +59,6 @@
         });
 
         function startGame() {
-            let speed = 6, score = 0, high = 0, over = false, start = false;
-            let obs = [], frame = 0, next = 100, biomeChange = 500;
-            let fly = false, god = false, space = 0, last = 0;
-            let keys = {u:false, d:false};
-            
             const dino = {
                 x: 50, y: 150, w: 44, h: 47, dy: 0, jump: false, leg: 0, ty: 150,
 
@@ -115,9 +105,8 @@
                 }
             };
 
-            // Define biomes and background visuals (clouds, sky, etc.)
             const clouds = [];
-            for (let i = 0; i < 5; i++) {  // Decreased cloud count
+            for (let i = 0; i < 5; i++) {
                 clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 40 + 20});
             }
 
@@ -136,7 +125,7 @@
                     ctx.beginPath();
                     ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
                     ctx.fill();
-                    cloud.x -= 0.5; // Cloud movement speed
+                    cloud.x -= (cloud.size / 40); // Faster clouds with bigger sizes
                     if (cloud.x < -cloud.size) {
                         cloud.x = 800 + cloud.size;
                     }
@@ -156,7 +145,6 @@
                 });
             }
 
-            // Define background and day/night cycle
             let isNight = false;
             let currentBiome = "desert";
             function setBiomeAndBackground() {
@@ -169,9 +157,8 @@
                 }
 
                 if (isNight) {
-                    ctx.fillStyle = '#001d2d'; // Dark night sky
+                    ctx.fillStyle = '#001d2d';
                     ctx.fillRect(0, 0, 800, 200);
-                    // Draw stars
                     for (let i = 0; i < 50; i++) {
                         const starX = Math.random() * 800;
                         const starY = Math.random() * 200;
@@ -183,7 +170,7 @@
                     if (Math.random() < 0.02) createShootingStar();
                     drawShootingStars();
                 } else {
-                    ctx.fillStyle = '#87CEEB'; // Day sky
+                    ctx.fillStyle = '#87CEEB';
                     ctx.fillRect(0, 0, 800, 200);
                 }
 
@@ -223,46 +210,102 @@
                 }
             }
 
-            // Add your game loop and other logic here, including triggering sounds based on score
-
-            function gameLoop() {
-                ctx.clearRect(0, 0, 800, 200); 
+            function loop() {
                 setBiomeAndBackground();
-
-                // Dino movement and drawing logic
-                dino.update();
-                dino.draw();
-
-                // Cactus and other obstacles handling
-                next--;
-                if (next <= 0) {
-                    const cactusSpacing = [20, 30, 57, 64];
-                    const spacing = cactusSpacing[Math.floor(Math.random() * cactusSpacing.length)];
-                    obs.push(new Cactus());
-                    next = spacing;
+                
+                if (!start) {
+                    dino.draw();
+                    promptAudio();
+                    requestAnimationFrame(loop);
+                    return;
                 }
 
-                // Collision detection and game logic
+                if (over) {
+                    dino.draw();
+                    obs.forEach(o => o.draw());
+                    ctx.fillStyle = '#000';
+                    ctx.font = 'bold 28px Courier';
+                    ctx.textAlign = 'center';
+                    ctx.fillText('GAME OVER', 400, 80);
+                    ctx.font = '18px Courier';
+                    ctx.fillText('Press R to restart', 400, 110);
+                    ctx.textAlign = 'right';
+                    ctx.fillText('Score: ' + Math.floor(score), 790, 30);
+                    ctx.fillText('High: ' + Math.floor(high), 790, 55);
+                    return;
+                }
+                
+                speed = Math.min(14, speed + 0.002);
+                score += fly ? 250 / 60 : 100 / 120;
+                
+                dino.update();
+                dino.draw();
+                
+                next--;
+                if (next <= 0) {
+                    obs.push(Math.random() > 0.6 ? new Cactus() : new Ptero());
+                    next = Math.random() * 10 + 30;
+                }
+                
                 obs = obs.filter(o => {
                     o.x -= speed;
                     o.draw();
-                    if (o.hits(dino)) {
+                    if (!god && o.hits(dino)) {
                         over = true;
+                        if (score > high) high = score;
                         if (audioEnabled) gameOverAudio.play();
                     }
                     return o.x > -50;
                 });
-
-                // Audio triggers
-                if (audioEnabled) {
-                    if (score >= 1000 && score < 2000) applause.play();
-                    else if (score >= 10000 && score < 20000) celebration.play();
-                }
-
-                requestAnimationFrame(gameLoop);
+                
+                ctx.fillStyle = '#000';
+                ctx.font = 'bold 18px Courier';
+                ctx.textAlign = 'right';
+                ctx.fillText('HI ' + String(Math.floor(high)).padStart(5, '0'), 790, 30);
+                ctx.fillText(String(Math.floor(score)).padStart(5, '0'), 790, 55);
+                
+                frame++;
+                requestAnimationFrame(loop);
             }
-
-            gameLoop();
+            
+            document.addEventListener('keydown', e => {
+                if (e.code === 'Space') {
+                    if (!start) { start = true; return; }
+                    if (over) return;
+                    const now = Date.now();
+                    if (now - last < 1000) space++;
+                    else space = 1;
+                    last = now;
+                    if (space >= 2 && !fly) {
+                        fly = true;
+                        space = 0;
+                    } else if (!fly && !dino.jump && dino.y >= 150) {
+                        dino.dy = -11;
+                        dino.jump = true;
+                    }
+                }
+                if (e.code === 'ArrowUp' && fly) { e.preventDefault(); keys.u = true; }
+                if (e.code === 'ArrowDown' && fly) { e.preventDefault(); keys.d = true; }
+                if (e.code === 'KeyR') {
+                    if (over) {
+                        score = 0; speed = 6; over = false; start = false;
+                        obs = []; frame = 0; next = 100;
+                        dino.y = 150; dino.dy = 0; dino.jump = false;
+                        fly = false; god = false; space = 0;
+                        keys = {u:false, d:false};
+                        loop();
+                    } else if (start) {
+                        fly = !fly;
+                    }
+                }
+            });
+            
+            document.addEventListener('keyup', e => {
+                if (e.code === 'ArrowUp') keys.u = false;
+                if (e.code === 'ArrowDown') keys.d = false;
+            });
+            
+            loop();
         }
 
         promptAudio();
