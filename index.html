@@ -40,7 +40,9 @@
         let audioEnabled = false;
         let isNight = false;
         let currentBiome = "desert";
-        
+        let sunPosX = -50; // Start the sun position off-screen
+        let moonPosX = 850; // Start the moon position off-screen
+
         // Cloud parallax effect
         const clouds = [];
         for (let i = 0; i < 5; i++) {
@@ -113,24 +115,36 @@
 
         // Background with smooth day-night cycle and biome transitions
         function setBiomeAndBackground() {
-            const timeOfDay = isNight ? 0.1 : 1; 
-            ctx.fillStyle = `rgba(135, 206, 235, ${timeOfDay})`;
+            // Smooth gradient background for day/night cycle
+            let gradient = ctx.createLinearGradient(0, 0, 0, 200);
+            if (isNight) {
+                gradient.addColorStop(0, '#001d2d'); // Night sky
+                gradient.addColorStop(1, '#001d2d'); // Darker ground
+            } else {
+                gradient.addColorStop(0, '#87CEEB'); // Day sky (light blue)
+                gradient.addColorStop(1, '#B8E0E0'); // Ground during the day
+            }
+            ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, 800, 200);
 
-            // Sun/Moon
+            // Draw sun and moon with movement from left to right
             if (isNight) {
-                ctx.fillStyle = '#fff';
+                ctx.fillStyle = '#fff';  // Moon color
                 ctx.beginPath();
-                ctx.arc(700, 40, 30, 0, Math.PI * 2);
+                ctx.arc(moonPosX, 40, 30, 0, Math.PI * 2); // Moon's arc
                 ctx.fill();
+                moonPosX -= 0.1; // Moon moves left
+                if (moonPosX < -50) moonPosX = 850; // Reset moon position
             } else {
-                ctx.fillStyle = '#FFD700';
+                ctx.fillStyle = '#FFD700'; // Sun color
                 ctx.beginPath();
-                ctx.arc(700, 40, 40, 0, Math.PI * 2);
+                ctx.arc(sunPosX, 40, 40, 0, Math.PI * 2); // Sun's arc
                 ctx.fill();
+                sunPosX += 0.1; // Sun moves right
+                if (sunPosX > 850) sunPosX = -50; // Reset sun position
             }
 
-            // Biomes
+            // Draw Biomes
             if (currentBiome === "desert") {
                 ctx.fillStyle = '#F4A300';
                 ctx.fillRect(0, 140, 800, 60);
@@ -217,7 +231,7 @@
                 return false;
             });
 
-            // Draw score and high score
+            // Draw score
             ctx.fillStyle = '#000';
             ctx.font = 'bold 18px Courier';
             ctx.textAlign = 'right';
