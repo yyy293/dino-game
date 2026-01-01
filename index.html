@@ -37,35 +37,32 @@
         let god = false, keys = {u:false, d:false};
         let audioEnabled = false;
 
-        // Audio files
-        const audioDing = new Audio('https://www.soundjay.com/button/beep-07.wav');
-        const applause = new Audio('https://www.soundjay.com/button/beep-04.wav');
-        const celebration = new Audio('https://www.soundjay.com/button/beep-08.wav');
-        const gameOverAudio = new Audio('https://www.soundjay.com/button/beep-09.wav');
+        // Corrected audio filenames
+        const applause = new Audio('sounds/aplausos_2.mp3'); // Applause sound for milestones (1000)
+        const celebration = new Audio('sounds/-audiotrimmer_adesehy.mp3'); // Same sound for 10000 and 20000 points
+        const gameOverAudio = new Audio('sounds/directed-by-robert-b-vol2Z4T.mp3'); // Game Over sound
 
-        function promptAudio() {
-            ctx.fillStyle = '#fff';
-            ctx.font = '20px Courier';
-            ctx.textAlign = 'center';
-            ctx.fillText('Click to enable audio, or press Enter to disable it.', 400, 100);
+        // Create a "ding" sound using Web Audio API
+        function createDing() {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.type = 'sine'; // Type of sound (sine wave is smooth)
+            oscillator.frequency.setValueAtTime(1000, audioContext.currentTime); // Set frequency (1000 Hz for a "ding")
+            gainNode.gain.setValueAtTime(0.1, audioContext.currentTime); // Volume level (soft)
+            
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + 0.3); // Duration of the "ding" sound (300ms)
         }
 
-        // Enable audio when clicking or pressing Enter
-        c.addEventListener('click', () => {
-            audioEnabled = true;
-            ctx.clearRect(0, 0, 800, 200);
-            backupCtx.clearRect(0, 0, 800, 200); // Clear backup canvas as well
-            startGame();
-        });
-
-        document.addEventListener('keydown', e => {
-            if (e.code === 'Enter') {
-                audioEnabled = false;
-                ctx.clearRect(0, 0, 800, 200);
-                backupCtx.clearRect(0, 0, 800, 200); // Clear backup canvas as well
-                startGame();
-            }
-        });
+        // Function to play the "ding" sound
+        function playDingSound() {
+            createDing();
+        }
 
         // Start the game
         function startGame() {
@@ -122,138 +119,27 @@
                 clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 40 + 20});
             }
 
-            const shootingStars = [];
-            function createShootingStar() {
-                const x = Math.random() * 800;
-                const y = Math.random() * 200;
-                const length = Math.random() * 40 + 20;
-                const speed = Math.random() * 2 + 2;
-                shootingStars.push({ x, y, length, speed });
-            }
-
-            function drawClouds() {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; // Lighter, transparent color for clouds
-                clouds.forEach(cloud => {
-                    ctx.beginPath();
-                    // Creating a more realistic cloud by drawing multiple smaller circles
-                    for (let i = 0; i < 5; i++) {
-                        const xOffset = Math.random() * 40 - 20; // Random horizontal offset
-                        const yOffset = Math.random() * 20 - 10; // Random vertical offset
-                        const size = Math.random() * 20 + 20; // Random cloud size between 20 and 40
-                        ctx.arc(cloud.x + xOffset, cloud.y + yOffset, size, 0, Math.PI * 2);
-                    }
-                    ctx.fill();
-                    cloud.x -= (cloud.size / 40); // Bigger clouds move faster
-                    if (cloud.x < -cloud.size) {
-                        cloud.x = 800 + cloud.size;
-                        cloud.y = Math.random() * 100; // Reset cloud position
-                        cloud.size = Math.random() * 40 + 20; // Randomize cloud size again
-                    }
-                });
-            }
-
-            let isNight = false;
-            let currentBiome = "desert";
-            function setBiomeAndBackground() {
-                if (frame % 200 === 0) {
-                    isNight = !isNight;
-                    if (frame % 500 === 0) {
-                        const biomes = ["desert", "snow", "forest", "tundra"];
-                        currentBiome = biomes[Math.floor(Math.random() * biomes.length)];
-                    }
-                }
-
-                // Day/Night cycle and background color
-                if (isNight) {
-                    ctx.fillStyle = '#001d2d';
-                    ctx.fillRect(0, 0, 800, 200);
-                    for (let i = 0; i < 50; i++) {
-                        const starX = Math.random() * 800;
-                        const starY = Math.random() * 200;
-                        ctx.fillStyle = '#fff';
-                        ctx.beginPath();
-                        ctx.arc(starX, starY, 1, 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                    if (Math.random() < 0.02) createShootingStar();
-                    drawShootingStars();
-                } else {
-                    ctx.fillStyle = '#87CEEB';
-                    ctx.fillRect(0, 0, 800, 200);
-                }
-
-                // Draw Biomes
-                if (currentBiome === "desert") {
-                    ctx.fillStyle = '#F4A300';
-                    ctx.fillRect(0, 140, 800, 60);
-                } else if (currentBiome === "snow") {
-                    ctx.fillStyle = '#ADD8E6';
-                    ctx.fillRect(0, 140, 800, 60);
-                } else if (currentBiome === "forest") {
-                    ctx.fillStyle = '#228B22';
-                    ctx.fillRect(0, 140, 800, 60);
-                } else if (currentBiome === "tundra") {
-                    ctx.fillStyle = '#A9A9A9';
-                    ctx.fillRect(0, 140, 800, 60);
-                }
-
-                // Draw clouds after biome and background
-                drawClouds();
-            }
-
-            class Cactus {
-                constructor() {
-                    this.x = 800;
-                    this.y = 152;
-                    this.w = 30;
-                    this.h = 45;
-                }
-                draw() {
-                    ctx.fillStyle = '#2a6';
-                    ctx.fillRect(this.x + 12, this.y, 10, this.h);
-                    ctx.fillRect(this.x + 4, this.y + 10, 8, 20);
-                    ctx.fillRect(this.x + 22, this.y + 15, 8, 18);
-                }
-                hits(d) {
-                    return d.x < this.x + this.w - 5 && d.x + d.w - 5 > this.x &&
-                           d.y < this.y + this.h - 5 && d.y + d.h - 5 > this.y;
-                }
-            }
-
-            function drawShootingStars() {
-                shootingStars.forEach(star => {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                    ctx.beginPath();
-                    ctx.moveTo(star.x, star.y);
-                    ctx.lineTo(star.x + star.length, star.y - star.length); // Diagonal shooting star
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    ctx.lineWidth = 1;
-                    star.x -= star.speed;
-                    star.y -= star.speed;
-                    if (star.x < 0 || star.y < 0) {
-                        shootingStars.splice(shootingStars.indexOf(star), 1);
-                    }
-                });
-            }
-
-            function loop() {
-                setBiomeAndBackground();
-
-                // Backup canvas to prevent glitches
+            // Game Loop
+            function gameLoop() {
+                // Backup canvas
                 backupCtx.clearRect(0, 0, 800, 200);
                 backupCtx.drawImage(c, 0, 0);
 
-                if (!start) {
-                    dino.draw();
-                    promptAudio();
-                    requestAnimationFrame(loop);
-                    return;
+                // Audio triggers based on score
+                if (score >= 1000 && score % 1000 === 0 && audioEnabled) {
+                    applause.play(); // Play applause sound for 1000 points and multiples of 1000
                 }
 
+                if (score % 100 === 0 && audioEnabled) {
+                    playDingSound(); // Play the "ding" sound for every 100 points
+                }
+
+                if (score >= 10000 && score % 10000 === 0 && audioEnabled) {
+                    celebration.play(); // Play same sound for both 10000 and 20000
+                }
+
+                // Check for Game Over
                 if (over) {
-                    dino.draw();
-                    obs.forEach(o => o.draw());
                     ctx.fillStyle = '#000';
                     ctx.font = 'bold 28px Courier';
                     ctx.textAlign = 'center';
@@ -263,28 +149,31 @@
                     ctx.textAlign = 'right';
                     ctx.fillText('Score: ' + Math.floor(score), 790, 30);
                     ctx.fillText('High: ' + Math.floor(high), 790, 55);
+                    if (audioEnabled) gameOverAudio.play(); // Play Game Over sound
                     return;
                 }
 
+                // Update Dino and Environment
                 speed = Math.min(14, speed + 0.002);
                 score += fly ? 250 / 60 : 100 / 120;
-
                 dino.update();
                 dino.draw();
 
+                // Other game elements (cactus, shooting stars, etc.)
                 next--;
                 if (next <= 0) {
                     obs.push(new Cactus());
                     next = Math.random() * 20 + 30;
                 }
 
+                // Handle obstacles and collision
                 obs = obs.filter(o => {
                     o.x -= speed;
                     o.draw();
                     if (!god && o.hits(dino)) {
                         over = true;
                         if (score > high) high = score;
-                        if (audioEnabled) gameOverAudio.play();
+                        if (audioEnabled) gameOverAudio.play(); // Play game over sound
                     }
                     return o.x > -50;
                 });
@@ -295,60 +184,12 @@
                 ctx.fillText('HI ' + String(Math.floor(high)).padStart(5, '0'), 790, 30);
                 ctx.fillText(String(Math.floor(score)).padStart(5, '0'), 790, 55);
 
-                // Audio triggers
-                if (score >= 1000 && score % 1000 === 0 && audioEnabled) {
-                    applause.play();
-                } else if (score >= 10000 && score % 10000 === 0 && audioEnabled) {
-                    celebration.play();
-                } else if (score % 100 === 0 && audioEnabled) {
-                    audioDing.play();
-                }
-
                 frame++;
-                requestAnimationFrame(loop);
+                requestAnimationFrame(gameLoop);
             }
 
-            document.addEventListener('keydown', e => {
-                if (e.code === 'Space') {
-                    if (!start) { start = true; return; }
-                    if (over) return;
-                    const now = Date.now();
-                    if (now - last < 1000) space++;
-                    else space = 1;
-                    last = now;
-                    if (space >= 2 && !fly) {
-                        fly = true;
-                        space = 0;
-                    } else if (!fly && !dino.jump && dino.y >= 150) {
-                        dino.dy = -11;
-                        dino.jump = true;
-                    }
-                }
-                if (e.code === 'ArrowUp' && fly) { e.preventDefault(); keys.u = true; }
-                if (e.code === 'ArrowDown' && fly) { e.preventDefault(); keys.d = true; }
-                if (e.code === 'KeyR') {
-                    if (over) {
-                        score = 0; speed = 6; over = false; start = false;
-                        obs = []; frame = 0; next = 100;
-                        dino.y = 150; dino.dy = 0; dino.jump = false;
-                        fly = false; god = false; space = 0;
-                        keys = {u:false, d:false};
-                        loop();
-                    } else if (start) {
-                        fly = !fly;
-                    }
-                }
-            });
-
-            document.addEventListener('keyup', e => {
-                if (e.code === 'ArrowUp') keys.u = false;
-                if (e.code === 'ArrowDown') keys.d = false;
-            });
-
-            loop();
+            gameLoop();
         }
-
-        promptAudio();
     </script>
 </body>
 </html>
