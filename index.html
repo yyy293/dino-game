@@ -120,28 +120,27 @@
             }
 
             function drawClouds() {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.3)'; // Lighter, transparent color for clouds
                 clouds.forEach(cloud => {
                     ctx.beginPath();
-                    ctx.arc(cloud.x, cloud.y, cloud.size, 0, Math.PI * 2);
+                    
+                    // Creating a more realistic cloud by drawing multiple smaller circles
+                    for (let i = 0; i < 5; i++) {
+                        const xOffset = Math.random() * 40 - 20; // Random horizontal offset
+                        const yOffset = Math.random() * 20 - 10; // Random vertical offset
+                        const size = Math.random() * 20 + 20; // Random cloud size between 20 and 40
+                        ctx.arc(cloud.x + xOffset, cloud.y + yOffset, size, 0, Math.PI * 2);
+                    }
+                    
                     ctx.fill();
-                    cloud.x -= (cloud.size / 40); // Faster clouds with bigger sizes
+
+                    // Moving the cloud to the left
+                    cloud.x -= (cloud.size / 40); // Bigger clouds move faster
                     if (cloud.x < -cloud.size) {
                         cloud.x = 800 + cloud.size;
+                        cloud.y = Math.random() * 100; // Reset cloud position
+                        cloud.size = Math.random() * 40 + 20; // Randomize cloud size again
                     }
-                });
-            }
-
-            function drawShootingStars() {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                shootingStars.forEach(star => {
-                    ctx.beginPath();
-                    ctx.moveTo(star.x, star.y);
-                    ctx.lineTo(star.x - star.length, star.y + star.length);
-                    ctx.lineWidth = 2;
-                    ctx.stroke();
-                    star.x -= star.speed;
-                    if (star.x < 0) shootingStars.splice(shootingStars.indexOf(star), 1);
                 });
             }
 
@@ -156,9 +155,11 @@
                     }
                 }
 
+                // Day/Night cycle and background color
                 if (isNight) {
                     ctx.fillStyle = '#001d2d';
                     ctx.fillRect(0, 0, 800, 200);
+                    // Draw stars and shooting stars
                     for (let i = 0; i < 50; i++) {
                         const starX = Math.random() * 800;
                         const starY = Math.random() * 200;
@@ -174,6 +175,7 @@
                     ctx.fillRect(0, 0, 800, 200);
                 }
 
+                // Draw Biomes
                 if (currentBiome === "desert") {
                     ctx.fillStyle = '#F4A300';
                     ctx.fillRect(0, 140, 800, 60);
@@ -188,6 +190,7 @@
                     ctx.fillRect(0, 140, 800, 60);
                 }
 
+                // Draw clouds after biome and background
                 drawClouds();
             }
 
@@ -210,9 +213,26 @@
                 }
             }
 
+            function drawShootingStars() {
+                shootingStars.forEach(star => {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.beginPath();
+                    ctx.moveTo(star.x, star.y);
+                    ctx.lineTo(star.x + star.length, star.y - star.length); // Diagonal shooting star
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                    star.x -= star.speed;
+                    star.y -= star.speed;
+                    if (star.x < 0 || star.y < 0) {
+                        shootingStars.splice(shootingStars.indexOf(star), 1);
+                    }
+                });
+            }
+
             function loop() {
                 setBiomeAndBackground();
-                
+
                 if (!start) {
                     dino.draw();
                     promptAudio();
@@ -234,19 +254,19 @@
                     ctx.fillText('High: ' + Math.floor(high), 790, 55);
                     return;
                 }
-                
+
                 speed = Math.min(14, speed + 0.002);
                 score += fly ? 250 / 60 : 100 / 120;
-                
+
                 dino.update();
                 dino.draw();
-                
+
                 next--;
                 if (next <= 0) {
-                    obs.push(Math.random() > 0.6 ? new Cactus() : new Ptero());
-                    next = Math.random() * 10 + 30;
+                    obs.push(new Cactus());
+                    next = Math.random() * 20 + 30;
                 }
-                
+
                 obs = obs.filter(o => {
                     o.x -= speed;
                     o.draw();
@@ -257,17 +277,26 @@
                     }
                     return o.x > -50;
                 });
-                
+
                 ctx.fillStyle = '#000';
                 ctx.font = 'bold 18px Courier';
                 ctx.textAlign = 'right';
                 ctx.fillText('HI ' + String(Math.floor(high)).padStart(5, '0'), 790, 30);
                 ctx.fillText(String(Math.floor(score)).padStart(5, '0'), 790, 55);
-                
+
+                // Audio triggers
+                if (score >= 1000 && score % 1000 === 0 && audioEnabled) {
+                    applause.play();
+                } else if (score >= 10000 && score % 10000 === 0 && audioEnabled) {
+                    celebration.play();
+                } else if (score % 100 === 0 && audioEnabled) {
+                    audioDing.play();
+                }
+
                 frame++;
                 requestAnimationFrame(loop);
             }
-            
+
             document.addEventListener('keydown', e => {
                 if (e.code === 'Space') {
                     if (!start) { start = true; return; }
@@ -299,12 +328,12 @@
                     }
                 }
             });
-            
+
             document.addEventListener('keyup', e => {
                 if (e.code === 'ArrowUp') keys.u = false;
                 if (e.code === 'ArrowDown') keys.d = false;
             });
-            
+
             loop();
         }
 
