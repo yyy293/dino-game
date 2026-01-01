@@ -6,262 +6,91 @@
     <title>Dino Game</title>
     <style>
         * { margin: 0; padding: 0; }
-        body { 
+        body {
             display: flex;
-            justify-content: center; 
-            align-items: center; 
-            min-height: 100vh; 
-            background: #222;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #777; /* Gray background for the page */
         }
-        canvas { 
-            border: 2px solid #fff;
+        canvas {
+            border: 5px solid white; /* White outline around the canvas */
+            background-color: #808080; /* Gray background inside the canvas */
+        }
+        #message {
+            position: absolute;
+            font-size: 20px;
+            color: white;
+            text-align: center;
         }
     </style>
 </head>
 <body>
     <!-- Main Canvas -->
     <canvas id="game" width="800" height="200"></canvas>
+    <div id="message">Click to Enable Audio or Press Enter for No Audio</div>
 
     <script>
         const c = document.getElementById('game');
         const ctx = c.getContext('2d');
+        const message = document.getElementById('message');
 
-        // Correct audio file paths (now assuming all audio files are in the same 'main' directory)
+        let audioEnabled = false;
+
+        // Placeholder for audio files (replace with actual paths)
         const applause = new Audio('aplausos_2.mp3');
         const celebration = new Audio('-audiotrimmer_adesehy.mp3');
         const gameOverAudio = new Audio('directed-by-robert-b-vol2Z4T.mp3');
-        applause.load();
-        celebration.load();
-        gameOverAudio.load();
 
         // Game variables
         let speed = 6, score = 0, high = 0, over = false, start = false;
-        let obs = [], frame = 0, next = 100, space = 0, last = 0, fly = false;
-        let audioEnabled = false;
-        let isNight = false;
-        let currentBiome = "desert";
-        let sunPosX = -50; // Start the sun position off-screen
-        let moonPosX = 850; // Start the moon position off-screen
 
-        // Cloud parallax effect
-        const clouds = [];
-        for (let i = 0; i < 5; i++) {
-            clouds.push({x: Math.random() * 800, y: Math.random() * 100, size: Math.random() * 40 + 20, speed: Math.random() * 0.5 + 0.2});
-        }
-
-        // Dino object with walking animation
-        const dino = {
-            x: 50, y: 150, w: 44, h: 47, dy: 0, jump: false, leg: 0, ty: 150,
-            update() {
-                if (fly) {
-                    this.y = Math.max(20, this.y - 12);
-                } else {
-                    this.dy += 0.6;
-                    this.y += this.dy;
-                    if (this.y >= 150) {
-                        this.y = 150;
-                        this.dy = 0;
-                        this.jump = false;
-                    }
-                }
-                if (this.y >= 150 && frame % 5 === 0) this.leg = 1 - this.leg;
-            },
-            draw() {
-                // Dino body with gradient for realism
-                ctx.fillStyle = fly ? '#0BF' : '#535';
-                ctx.beginPath();
-                ctx.arc(this.x + 22, this.y + 20, 22, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Dino legs (simple walking animation)
-                ctx.fillStyle = '#FFF';
-                ctx.fillRect(this.x + 15, this.y + 30, 7, 15);
-                ctx.fillRect(this.x + 25, this.y + 30, 7, 15);
-
-                // Dino head
-                ctx.fillStyle = '#FFF';
-                ctx.fillRect(this.x + 18, this.y - 5, 15, 15);
-
-                // Flight indicator
-                if (fly) {
-                    ctx.fillStyle = '#F80';
-                    ctx.font = '16px Courier';
-                    ctx.fillText('FLIGHT!', this.x - 10, this.y - 10);
-                }
-            }
-        };
-
-        // Cloud parallax effect function
-        function drawClouds() {
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-            clouds.forEach(cloud => {
-                ctx.beginPath();
-                for (let i = 0; i < 5; i++) {
-                    const xOffset = Math.random() * 40 - 20;
-                    const yOffset = Math.random() * 20 - 10;
-                    const size = Math.random() * 20 + 20;
-                    ctx.arc(cloud.x + xOffset, cloud.y + yOffset, size, 0, Math.PI * 2);
-                }
-                ctx.fill();
-                cloud.x -= cloud.speed;
-                if (cloud.x < -cloud.size) {
-                    cloud.x = 800 + cloud.size;
-                    cloud.y = Math.random() * 100;
-                    cloud.size = Math.random() * 40 + 20;
-                    cloud.speed = Math.random() * 0.5 + 0.2;
-                }
-            });
-        }
-
-        // Background with smooth day-night cycle and biome transitions
-        function setBiomeAndBackground() {
-            // Smooth gradient background for day/night cycle
-            let gradient = ctx.createLinearGradient(0, 0, 0, 200);
-            if (isNight) {
-                gradient.addColorStop(0, '#001d2d'); // Night sky
-                gradient.addColorStop(1, '#001d2d'); // Darker ground
-            } else {
-                gradient.addColorStop(0, '#87CEEB'); // Day sky (light blue)
-                gradient.addColorStop(1, '#B8E0E0'); // Ground during the day
-            }
-            ctx.fillStyle = gradient;
-            ctx.fillRect(0, 0, 800, 200);
-
-            // Draw sun and moon with movement from left to right
-            if (isNight) {
-                ctx.fillStyle = '#fff';  // Moon color
-                ctx.beginPath();
-                ctx.arc(moonPosX, 40, 30, 0, Math.PI * 2); // Moon's arc
-                ctx.fill();
-                moonPosX -= 0.1; // Moon moves left
-                if (moonPosX < -50) moonPosX = 850; // Reset moon position
-            } else {
-                ctx.fillStyle = '#FFD700'; // Sun color
-                ctx.beginPath();
-                ctx.arc(sunPosX, 40, 40, 0, Math.PI * 2); // Sun's arc
-                ctx.fill();
-                sunPosX += 0.1; // Sun moves right
-                if (sunPosX > 850) sunPosX = -50; // Reset sun position
-            }
-
-            // Draw Biomes
-            if (currentBiome === "desert") {
-                ctx.fillStyle = '#F4A300';
-                ctx.fillRect(0, 140, 800, 60);
-            } else if (currentBiome === "snow") {
-                ctx.fillStyle = '#ADD8E6';
-                ctx.fillRect(0, 140, 800, 60);
-                // Snowflakes effect
-                if (frame % 5 === 0) {
-                    ctx.fillStyle = '#FFF';
-                    ctx.beginPath();
-                    ctx.arc(Math.random() * 800, Math.random() * 200, Math.random() * 3 + 1, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            } else if (currentBiome === "forest") {
-                ctx.fillStyle = '#228B22';
-                ctx.fillRect(0, 140, 800, 60);
-            } else if (currentBiome === "tundra") {
-                ctx.fillStyle = '#A9A9A9';
-                ctx.fillRect(0, 140, 800, 60);
-            }
-
-            drawClouds();
-        }
-
-        // Cactus obstacles
-        class Cactus {
-            constructor() {
-                this.x = 800;
-                this.y = 152;
-                this.w = 30;
-                this.h = 45;
-            }
-            draw() {
-                ctx.fillStyle = '#2a6';
-                ctx.fillRect(this.x + 12, this.y, 10, this.h);
-                ctx.fillRect(this.x + 4, this.y + 10, 8, 20);
-                ctx.fillRect(this.x + 22, this.y + 15, 8, 18);
-            }
-            hits(d) {
-                return d.x < this.x + this.w - 5 && d.x + d.w - 5 > this.x &&
-                       d.y < this.y + this.h - 5 && d.y + d.h - 5 > this.y;
-            }
-        }
-
-        // Main game loop
-        function gameLoop() {
-            setBiomeAndBackground();
-
-            // Check for game over
-            if (over) {
-                ctx.fillStyle = '#000';
-                ctx.font = 'bold 28px Courier';
-                ctx.textAlign = 'center';
-                ctx.fillText('GAME OVER', 400, 80);
-                ctx.font = '18px Courier';
-                ctx.fillText('Press R to restart', 400, 110);
-                ctx.textAlign = 'right';
-                ctx.fillText('Score: ' + Math.floor(score), 790, 30);
-                ctx.fillText('High: ' + Math.floor(high), 790, 55);
-                if (audioEnabled) gameOverAudio.play();
-                return;
-            }
-
-            // Game logic (updating dino, obstacles, etc.)
-            speed = Math.min(14, speed + 0.002);
-            score += fly ? 250 / 60 : 100 / 120;
-
-            dino.update();
-            dino.draw();
-
-            next--;
-            if (next <= 0) {
-                obs.push(new Cactus());
-                next = Math.random() * 20 + 30;
-            }
-
-            obs = obs.filter(o => {
-                o.x -= speed;
-                o.draw();
-                if (!o.hits(dino)) return true;
-                over = true;
-                if (score > high) high = score;
-                if (audioEnabled) gameOverAudio.play();
-                return false;
-            });
-
-            // Draw score
-            ctx.fillStyle = '#000';
-            ctx.font = 'bold 18px Courier';
-            ctx.textAlign = 'right';
-            ctx.fillText('Score: ' + Math.floor(score), 790, 30);
-            ctx.fillText('High: ' + Math.floor(high), 790, 55);
-        }
-
-        // Initialize game
+        // Game start prompt and audio toggle
         function startGame() {
-            score = 0;
-            over = false;
-            obs = [];
-            speed = 6;
-            fly = false;
-            audioEnabled = true;
-            gameLoop();
+            message.style.display = 'none'; // Hide the message
+            // Game logic will start here
+            loop();
         }
 
-        // Event listeners
-        window.addEventListener('keydown', (e) => {
-            if (e.key === ' ' && !dino.jump) {
-                dino.dy = -15;
-                dino.jump = true;
+        // Function to update the canvas background and display the game
+        function loop() {
+            ctx.fillStyle = '#808080'; // Gray background
+            ctx.fillRect(0, 0, 800, 200); // Fill canvas
+
+            // If audio is enabled, display message
+            if (audioEnabled) {
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial';
+                ctx.fillText('Audio Enabled', 400, 50);
+            } else {
+                ctx.fillStyle = '#fff';
+                ctx.font = '20px Arial';
+                ctx.fillText('No Audio', 400, 50);
             }
-            if (e.key === 'r') {
+
+            // Additional game logic will go here (e.g., dino, obstacles, etc.)
+
+            // Request next animation frame
+            requestAnimationFrame(loop);
+        }
+
+        // Event listener for mouse click to enable audio
+        c.addEventListener('click', () => {
+            audioEnabled = true;
+            startGame();
+        });
+
+        // Event listener for Enter key to disable audio
+        document.addEventListener('keydown', e => {
+            if (e.code === 'Enter') {
+                audioEnabled = false;
                 startGame();
             }
         });
 
-        startGame(); // Start the game initially
+        // Start prompt message
+        message.style.display = 'block';
+
     </script>
 </body>
 </html>
